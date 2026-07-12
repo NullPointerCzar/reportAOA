@@ -1,0 +1,43 @@
+
+# LaTeX cache and auxiliary files
+# Common aux/log/output files
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.lot
+*.fls
+*.fdb_latexmk
+*.ilg
+*.ind
+*.idx
+*.synctex.gz
+*.synctex(busy)
+
+# Bibliography and intermediate
+*.bbl
+*.blg
+
+# Presentation and compile artifacts
+*.nav
+*.snm
+*.vrb
+*.dvi
+
+# latexmk and build folders
+.latexmk
+_minted*
+_build
+build/
+out/
+
+# Other common temp/cache files
+*.run.xml
+*.auxlock
+.texpadtmp
+.texlive*cache
+
+# Editor/IDE specific LaTeX caches
+.vscode/latex-workshop-cache
