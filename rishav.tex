@@ -1,0 +1,506 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{url}
+\usepackage{booktabs}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Algorithmic Effects of Prompt Engineering Techniques on Large Language Model Output}
+
+\author{
+\IEEEauthorblockN{1\textsuperscript{st} Sarwagya Acharya}
+\IEEEauthorblockA{\textit{<<DEPARTMENT>>} \\
+\textit{<<ORGANIZATION>>} \\
+<<CITY>>, <<COUNTRY>> \\
+<<EMAIL SARWAGYA>>}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Nitesh Pant}
+\IEEEauthorblockA{\textit{<<DEPARTMENT>>} \\
+\textit{<<ORGANIZATION>>} \\
+<<CITY>>, <<COUNTRY>> \\
+<<EMAIL NITESH>>}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Brishav Joshi}
+\IEEEauthorblockA{\textit{<<DEPARTMENT>>} \\
+\textit{<<ORGANIZATION>>} \\
+<<CITY>>, <<COUNTRY>> \\
+<<EMAIL BRISHAV>>}
+}
+
+\maketitle
+
+\begin{abstract}
+Prompt engineering has rapidly evolved from ad-hoc text tweaks into a family of techniques that systematically reshape how large language models (LLMs) generate output. Yet the literature largely treats these techniques as linguistic patterns, leaving their algorithmic consequences under-quantified. This paper analyses prompt engineering techniques through the lens of the conditional distribution that an LLM defines over output tokens, and characterises how each technique shifts that distribution via prompting, decoding, and reasoning-trace construction. We taxonomise the major technique families, formalise their effect on sampling, attention, and output diversity, and report a controlled empirical comparison across representative tasks. The results show that the algorithmic effect of a prompt often dominates its lexical content, and we recommend evaluation protocols that make this effect measurable.
+\end{abstract}
+
+\begin{IEEEkeywords}
+prompt engineering, large language models, chain-of-thought, decoding strategies, evaluation, algorithmic analysis
+\end{IEEEkeywords}
+
+\section{Introduction}
+\label{sec:intro}
+
+Large language models (LLMs) are now routinely deployed for question answering, code synthesis, summarisation, and tool use, and the practical quality of an LLM application is shaped as much by the prompt that surrounds a model call as by the model weights themselves \cite{b1,b2}. A growing catalogue of prompt engineering techniques---zero- and few-shot exemplars, chain-of-thought (CoT) \cite{b3}, self-consistency \cite{b4}, tree-of-thoughts (ToT) \cite{b5}, ReAct \cite{b6}, and retrieval-augmented prompts \cite{b7}---reports substantial gains on established benchmarks, often with no change to the underlying model.
+
+The dominant framing in this literature is empirical and qualitative: a technique is described by its prompting template and illustrated with selected outputs. While useful, this framing obscures a more fundamental question, namely \textit{what does the technique change inside the model?} In this paper we argue that the principal techniques are best understood as algorithmic operations on the conditional distribution $p_\theta(y \mid P, x)$ that an LLM defines over output tokens. Under this view, a prompt is not merely a textual wrapper; it is a control input that perturbs sampling, restructures attention, alters logit geometry, and conditions intermediate computational traces. The size of the resulting behavioural change often rivals, and sometimes exceeds, the difference between adjacent model scales.
+
+The contributions of this paper are as follows.
+
+\begin{itemize}
+    \item A taxonomy that organises prompt engineering techniques by the algorithmic object they modify: the prompt template, the decoding policy, or the reasoning trace.
+    \item A formal framework that expresses each technique family as a transformation on $p_\theta(y \mid P, x)$ and on the underlying arg max or sampling operator.
+    \item A controlled empirical study that isolates the algorithmic effect of prompting from the lexical effect by holding the prompt template fixed and varying decoding parameters $(T, k, p)$, and vice versa.
+    \item An evaluation protocol that we recommend for future prompt engineering research, designed to make algorithmic and lexical contributions separable.
+\end{itemize}
+
+The remainder of this paper is organised as follows. Section II reviews prior surveys and the foundational techniques that motivate this work. Section III introduces the taxonomy and notation. Section IV formalises the algorithmic effect of each technique. Section V describes the experimental design. Section VI reports the results, and Sections VII--IX discuss them, list limitations, and conclude.
+
+\section{Background and Related Work}
+\label{sec:related}
+
+The prompt engineering literature spans prompting patterns, decoding-time methods, and reasoning-trace construction. We organise the review along the same three axes used in our taxonomy (Section III).
+
+\subsection{Prompting patterns as control inputs}
+
+Brown et al. \cite{b1} demonstrated that scaling model size produces in-context learning, in which a small set of exemplars in the prompt elicits task behaviour without weight updates. The result established prompting as a first-class interface to LLMs and motivated subsequent work on exemplar selection, ordering, and formatting. Min et al. \cite{b2} further showed that the ground-truth labels in exemplars contribute less than the input-output format, evidence that prompts act partly as structural scaffolds for the model's own computations. Two findings sharpen this picture. Lu et al. \cite{b10} report that permuting a fixed exemplar set moves accuracy across a range wide enough to swamp the difference between competing methods, and Zhao et al. \cite{b11} trace part of that sensitivity to a prior bias in the label distribution that can be corrected without touching the wording of the prompt. Both results are difficult to explain if a prompt is regarded purely as a piece of natural language; both are unsurprising if it is regarded as a control input.
+
+\subsection{Reasoning-trace construction}
+
+Wei et al. \cite{b3} introduced chain-of-thought prompting, appending intermediate reasoning steps to exemplars and observing large gains on arithmetic, commonsense, and symbolic tasks. The technique reframes generation as a two-stage process: sample a reasoning chain $r$, then sample the answer $y$ conditioned on $r$. Kojima et al. \cite{b9} showed that a single trigger phrase reproduces much of the effect without exemplars, which separates the contribution of the trace from that of the demonstrations. Wang et al. \cite{b4} extended CoT with self-consistency, sampling multiple chains and selecting the most frequent final answer; the gain over greedy CoT demonstrates that the underlying distribution is multimodal and that marginalising over reasoning paths reallocates probability mass towards correct answers. Yao et al. \cite{b5} generalised chains to trees (tree-of-thoughts), Yao et al. \cite{b6} interleaved reasoning with tool calls in ReAct, and Madaan et al. \cite{b12} closed the loop by feeding the model's own critique back into the context. Across these works, the common algorithmic move is to expose intermediate computation to the sampling operator.
+
+\subsection{Decoding-time and retrieval augmentation}
+
+Beyond reasoning traces, decoding-time methods such as temperature, top-$k$ \cite{b13}, and nucleus (top-$p$) sampling \cite{b8} directly parametrise the output distribution; Meister et al. \cite{b14} argue that the useful criterion is closeness to the expected information content rather than raw probability mass. Retrieval-augmented generation (RAG) \cite{b7} couples the LLM to an external retriever, conditioning generation on documents fetched at inference time. While RAG is often presented as a knowledge-injection technique, it is, in our framing, a prompting technique: it changes the conditioning context $P$ of $p_\theta(y \mid P, x)$ and thereby changes the posterior over outputs.
+
+\subsection{Positioning of this paper}
+
+Existing surveys \cite{b15,b16} catalogue prompting techniques and, in the case of automated prompt search \cite{b17}, optimise over them, but they do not formalise the algorithmic effect of the resulting prompts. Empirical comparisons exist for individual techniques, yet they typically vary the prompt while holding decoding fixed, which confounds the algorithmic and lexical contributions. To our knowledge, no prior work isolates the algorithmic effect of prompting through controlled ablations on both the prompt template and the decoding policy. This paper fills that gap by treating prompting and decoding as two parameters of the same sampling operator and measuring each contribution independently.
+
+\subsection{Common notation and primer}
+\label{sec:notation}
+
+Throughout the paper we write $P$ for a prompt template, $x$ for the user input, and $y$ for the model output. An LLM with parameters $\theta$ defines a conditional distribution $p_\theta(y \mid P, x)$. Decoding is parameterised by a temperature $T$, a top-$k$ cutoff, and a nucleus threshold $p$. We treat CoT, self-consistency, and ToT as sampling procedures over reasoning traces $r$ followed by answers $y$, and we treat retrieval augmentation as a stochastic rewrite of $P$. These objects are formalised in Section IV.
+
+\section{Taxonomy of Prompt Engineering Techniques}
+\label{sec:taxonomy}
+
+A technique that improves a benchmark score tells us little by itself, because the improvement may originate at any of three points in the generation pipeline. We therefore classify techniques by the object they modify rather than by the surface form they take.
+
+\subsection{Three operator classes}
+
+\textbf{Definition 1} (Prompting method). \textit{A prompting method is a triple $M = (\Phi, \Psi, \Omega)$, where $\Phi$ is a prompt-space operator acting on the conditioning context, $\Psi$ is a decoding-space operator acting on the per-step token distribution, and $\Omega$ is a trace-space operator acting on the set of intermediate sequences that are generated before the answer is emitted. Any component may be the identity.}
+
+Definition 1 is deliberately coarse. Its purpose is to make the following claim checkable: two techniques that are described very differently in prose may occupy the same cell of the taxonomy, and two techniques presented as variants of one another may not. Table~\ref{tab:taxonomy} assigns the principal techniques to cells and records the cost each incurs.
+
+\subsection{Prompt-space operators}
+
+Prompt-space operators rewrite the conditioning context and leave both the decoding policy and the generated trace untouched. Instruction rewriting, role conditioning, exemplar selection and ordering, output-format scaffolding, and retrieval injection all belong here. What distinguishes them from one another is the amount of context they add and whether the added content is deterministic. Retrieval is the outlier: because the retriever returns a different document set for different inputs, the operator is stochastic even when the template around it is fixed, and any variance it introduces will be attributed to the prompt unless the retrieved set is logged.
+
+\subsection{Decoding-space operators}
+
+Decoding-space operators leave the context untouched and reshape the per-step distribution before a token is drawn. Temperature scaling is a smooth reparametrisation; top-$k$ and nucleus sampling are support restrictions; beam search replaces per-step sampling with an approximate search for a high-scoring sequence. These operators are the only ones in the taxonomy that can be applied without changing a single character of the prompt, which makes them the natural control condition for the experiments in Section V.
+
+\subsection{Trace-space operators}
+
+Trace-space operators change what the model generates before it commits to an answer. The simplest, zero-shot CoT, adds a trigger phrase and lets the model produce a chain; the most elaborate, tree-of-thoughts, maintains a frontier of partial traces and expands it under a value estimate. Self-consistency sits between the two: it does not alter the shape of an individual trace but draws several and aggregates them. We stress that trace-space operators are not free. Every one of them buys accuracy with tokens, forward passes, or both, and Table~\ref{tab:taxonomy} records the exchange rate.
+
+\subsection{Composition and interaction}
+
+The three operator classes do not compose independently, and the failure of independence is itself informative. Self-consistency is the clearest case: it requires $T > 0$, since $m$ greedy samples are $m$ copies of one chain, so the trace-space operator is only defined relative to a decoding-space operator that supplies diversity. Conversely, few-shot CoT couples $\Phi$ and $\Omega$ because the exemplars carry the traces. We therefore formulate the two hypotheses that the experiments in Section V are designed to test:
+
+\begin{enumerate}
+    \item[H1] Holding the algorithmic structure of a prompt fixed, paraphrasing its wording produces a smaller change in task accuracy than moving between cells of Table~\ref{tab:taxonomy}.
+    \item[H2] The interaction between trace-space and decoding-space operators is significant, so reporting a trace-space technique without its decoding configuration underdetermines the result.
+\end{enumerate}
+
+\section{Algorithmic Framework}
+\label{sec:framework}
+
+\subsection{Base distribution}
+\label{sec:base-dist}
+
+Let $\mathcal{V}$ be the vocabulary and let $y = (y_1, \ldots, y_{|y|}) \in \mathcal{V}^*$ be an output sequence. An autoregressive LLM factorises
+
+\begin{equation}
+p_\theta(y \mid P, x) = \prod_{t=1}^{|y|} p_\theta(y_t \mid y_{<t}, P, x),
+\label{eq:autoreg}
+\end{equation}
+
+where each factor is obtained from a logit vector $z_t \in \mathbb{R}^{|\mathcal{V}|}$ by
+
+\begin{equation}
+p_\theta(y_t = v \mid y_{<t}, P, x) = \frac{\exp(z_{t,v})}{\sum_{u \in \mathcal{V}} \exp(z_{t,u})}.
+\label{eq:softmax}
+\end{equation}
+
+Equations~\eqref{eq:autoreg} and~\eqref{eq:softmax} contain every quantity a prompting technique can touch. A technique either changes $z_{t}$ through the conditioning arguments, changes the map from $z_{t}$ to a sampled token, or changes which sequences are generated and how they are combined.
+
+\subsection{Prompt-space operators as logit displacement}
+\label{sec:prompt-operators}
+
+Let $\Phi : P \mapsto P'$ and write $z_t(P)$ for the logits obtained under context $P$. The operator induces a displacement
+
+\begin{equation}
+\Delta_{t}(\Phi) = z_{t}(P^{\prime}) - z_{t}(P) \in \mathbb{R}^{|\mathcal{V}|}.
+\label{eq:delta}
+\end{equation}
+
+Because the softmax in~\eqref{eq:softmax} is invariant to adding a constant to every logit, only the component of $\Delta_{t}$ orthogonal to $\mathbf{1}$ has any behavioural consequence. The effective displacement is therefore the centred vector
+
+\begin{equation}
+\hat{\Delta}_{t}(\Phi) = \Delta_{t}(\Phi) - \frac{1}{|\mathcal{V}|}\big(\mathbf{1}^{\top}\Delta_{t}(\Phi)\big)\mathbf{1},
+\label{eq:centred-delta}
+\end{equation}
+
+and $\|\hat{\Delta}_{t}\|_{2}$ is a scalar summary of how hard the rewrite pushed on the model at step $t$. This distinction matters in practice: a prompt edit that raises every logit uniformly, for instance one that only lengthens the context without adding discriminative content, has $\hat{\Delta}_{t} \approx 0$ and cannot change behaviour no matter how many tokens it costs.
+
+A second, coarser summary is the divergence induced at the distribution level,
+
+\begin{equation}
+D_{\Phi} = \mathbb{E}_{x}\left[ \frac{1}{|y|} \sum_{t=1}^{|y|} D_{\mathrm{KL}}\big(p_{\theta}(\cdot \mid y_{<t}, P', x) \| p_{\theta}(\cdot \mid y_{<t}, P, x)\big) \right],
+\label{eq:divergence}
+\end{equation}
+
+which we report per token so that prompts of different lengths remain comparable. Attention offers a third view. Writing $\alpha_{t,S}^{(\ell,h)}$ for the mass that head $h$ of layer $\ell$ places on a context span $S$ at step $t$, the quantity $\sum_{\ell,h}\alpha_{t,S}^{(\ell,h)}$ measures how much of the model's read budget a newly inserted span attracts. A rewrite that raises $D_{\Phi}$ while leaving attention mass on the inserted span near zero is evidence of an indirect effect---a shift in position or in the boundary structure of the context---rather than of the model attending to the new text.
+
+\subsection{Decoding-space operators as measure transforms}
+\label{sec:decoding-operators}
+
+Fix the logits and let $\Psi$ act on them. Temperature scaling produces
+
+\begin{equation}
+q_{T}(v) = \frac{\exp(z_{v} / T)}{\sum_{u} \exp(z_{u} / T)},
+\label{eq:temperature}
+\end{equation}
+
+a Gibbs family whose Shannon entropy $H(q_{T})$ is non-decreasing in $T$, with $q_{T}$ approaching a point mass on $\arg\max_{v} z_{v}$ as $T \to 0^{+}$ and the uniform distribution as $T \to \infty$. Temperature is thus a continuous interpolation between the maximisation and the uniform-exploration regimes, and the two limits bracket everything a sampler can do without additional information.
+
+Truncation operators behave differently. Let $\pi$ order $\mathcal{V}$ by decreasing probability. Top-$k$ retains $S_{k} = \{\pi_{1}, \ldots, \pi_{k}\}$ and nucleus sampling retains the smallest prefix whose mass reaches $p$,
+
+\begin{equation}
+S_{p} = \left\{\pi_{1}, \dots, \pi_{\kappa}\right\}, \quad \kappa = \min\left\{j: \sum_{i \leq j} q(\pi_{i}) \geq p\right\},
+\label{eq:nucleus}
+\end{equation}
+
+after which the retained mass is renormalised. Both discard the tail, but they discard it in different ways, and the difference is the point.
+
+\textbf{Proposition 1 (Support and entropy bounds).} \textit{Let $q^{(k)}$ be the renormalisation of $q$ onto $S_k$. Then $|\operatorname{supp}(q^{(k)})| \leq k$ and $H(q^{(k)}) \leq \log k$, both independent of the context. For nucleus sampling the analogous bound is $H(q^{(p)}) \leq \log \kappa(x, t)$, where $\kappa$ is a function of the step-level distribution and is therefore not fixed in advance.}
+
+Proposition 1 explains an asymmetry that is often observed but rarely stated: top-$k$ imposes a hard, context-independent ceiling on per-step diversity, whereas nucleus sampling lets the ceiling float with the model's own confidence, contracting the support where the model is certain and widening it where it is not. Reporting a single top-$p$ value without the resulting $\kappa$ statistics therefore conveys much less information than it appears to.
+
+\subsection{Trace-space operators as marginalisation and search}
+\label{sec:trace-operators}
+
+Let $r$ denote an intermediate trace. The answer distribution the model actually defines is the marginal
+
+\begin{equation}
+p_{\theta}(y \mid P, x) = \sum_{r} p_{\theta}(y \mid r, P, x) \, p_{\theta}(r \mid P, x).
+\label{eq:marginal}
+\end{equation}
+
+Direct answering approximates $\arg\max_{y}$ of~\eqref{eq:marginal} without ever materialising $r$. Greedy CoT does something different: it materialises one trace and returns the answer attached to it, which approximates
+
+\begin{equation}
+\hat{y}_{\mathrm{CoT}} = \arg\max_{y} \max_{r} p_{\theta}(y, r \mid P, x),
+\label{eq:cot-joint}
+\end{equation}
+
+the joint mode rather than the marginal mode. The two need not coincide.
+
+\textbf{Proposition 2 (Mode mismatch).} \textit{There exist distributions for which $\arg\max_y\max_r p(y,r) \neq \arg\max_y\sum_r p(y,r)$.}
+
+\textit{Proof.} Take two answers $y_{1}, y_{2}$ and three traces. Let $p(y_{1}, r_{1}) = 0.30$ and $p(y_{1}, r_{2}) = p(y_{1}, r_{3}) = 0$, while $p(y_{2}, r_{1}) = p(y_{2}, r_{2}) = p(y_{2}, r_{3}) = 0.23\overline{3}$. The joint mode selects $y_{1}$ with 0.30, but the marginals are $p(y_{1}) = 0.30 < p(y_{2}) = 0.70$. $\blacksquare$
+
+Proposition 2 is the algorithmic content of self-consistency. Drawing $m$ traces and taking the plurality answer is a Monte Carlo estimator of the marginal mode, so the technique corrects a systematic bias in greedy CoT rather than merely averaging away noise. Its reliability follows from a standard concentration argument.
+
+\textbf{Proposition 3 (Vote concentration).} \textit{Let $y^{\star}$ maximise the marginal with mass $q^{\star}$, let $q'$ be the largest mass on any other answer, and let $\gamma = q^{\star} - q' > 0$. For $m$ i.i.d. traces, the plurality vote returns $y^{\star}$ with probability at least $1 - (|\mathcal{Y}| - 1)\exp(-m\gamma^{2} /2)$.}
+
+\textit{Proof.} For each competing answer apply Hoeffding's inequality to the difference of the two empirical frequencies, which has mean $\gamma$ and bounded increments, then take a union bound over the at most $|\mathcal{Y}| - 1$ competitors. $\blacksquare$
+
+Two consequences follow. First, the useful range of $m$ is governed by the margin $\gamma$, not by task difficulty as such: items with a small margin need many samples and items with a large margin need very few, which is what makes adaptive sample-allocation schemes profitable. Second, self-consistency cannot repair a distribution whose marginal mode is wrong, since increasing $m$ only sharpens convergence to $y^{*}$. Errors of that kind must be addressed in prompt space or trace space.
+
+Tree-of-thoughts replaces sampling with search. With branching factor $b$, depth $d$, and a value estimate $v(\cdot)$ over partial traces, the method returns
+
+\begin{equation}
+\hat{y}_{\mathrm{ToT}} = \arg\max_{y} \max_{r \in \mathcal{R}_{b,d}} v(r) \, p_{\theta}(y \mid r, P, x),
+\label{eq:tot}
+\end{equation}
+
+where $\mathcal{R}_{b,d}$ is the set of traces the search actually visits. Compared with~\eqref{eq:cot-joint}, the model's own trace probability has been partly replaced by an external value signal; ToT therefore inherits the quality of $v$, and a poorly calibrated $v$ degrades it towards an expensive beam search. ReAct is the same substitution carried out by the environment instead of a value function: the trace interleaves actions with observations $o_{1:n}$, and the conditioning distribution becomes $p_{\theta}(y \mid P, x, o_{1:n})$ with $o_{i}$ drawn from a tool rather than from $\theta$. This is why ReAct reduces exactly those errors that arise from missing information, and why it leaves errors of reasoning largely intact.
+
+\subsection{Cost model}
+\label{sec:cost-model}
+
+Let $C$ count forward passes and $N$ count generated tokens. Direct answering has $C = 1$ and $N = O(|y|)$. CoT has $C = 1$ and $N = O(|r| + |y|)$. Self-consistency multiplies both by $m$. ToT costs $C = O(bd)$ passes plus the value calls. Because $|r| \gg |y|$ on reasoning tasks, the dominant term is usually trace length rather than the number of passes, so accuracy per thousand generated tokens is a more faithful efficiency measure than accuracy per call. We report both in Section~\ref{sec:cost-results}.
+
+\subsection{Separating algorithmic from lexical effects}
+\label{sec:aer}
+
+The framework above suggests a direct measurement. Let $\Phi_{\mathrm{lex}}$ range over paraphrases that preserve algorithmic structure---same exemplar count, same trace shape, same output format---and let $\Phi_{\mathrm{alg}}$ range over changes of cell in Table~\ref{tab:taxonomy}. Fitting a two-factor model to the accuracy $A$ over these two factors and their interaction, we define the algorithmic effect ratio
+
+\begin{equation}
+\mathrm{AER} = \frac{\sigma_{\mathrm{alg}}^{2}}{\sigma_{\mathrm{alg}}^{2} + \sigma_{\mathrm{lex}}^{2}},
+\label{eq:aer}
+\end{equation}
+
+where each term is the variance component attributable to that factor. An AER near 1 means the technique's benefit survives rewording; a value near 0.5 means half of a reported gain is a property of the particular sentence used to elicit it. Together with $D_{\Phi}$ from~\eqref{eq:divergence} and the $\kappa$ statistics of Proposition 1, this gives a small set of quantities that a prompt engineering paper can report and a reader can compare.
+
+\begin{table*}[htbp]
+\caption{Taxonomy of Prompt Engineering Techniques by Modified Algorithmic Object}
+\centering
+\small
+\begin{tabular}{llllll}
+\toprule
+\textbf{Technique} & \textbf{Operator} & \textbf{Object modified} & \textbf{Forward passes} & \textbf{Added tokens} & \textbf{Stochastic?} \\
+\midrule
+Instruction rewriting & $\Phi$ & conditioning context & 1 & $O(|I|)$ & no \\
+Role / persona conditioning & $\Phi$ & conditioning context & 1 & $O(1)$ & no \\
+Few-shot exemplars & $\Phi$ & conditioning context & 1 & $O(n\bar{\ell})$ & no \\
+Format scaffolding & $\Phi$ & conditioning context & 1 & $O(1)$ & no \\
+Retrieval augmentation & $\Phi$ & conditioning context & 1+retrieval & $O(n_d\bar{\ell}_d)$ & yes \\
+\midrule
+Temperature scaling & $\Psi$ & per-step distribution & 1 & 0 & yes \\
+Top-$k$ truncation & $\Psi$ & per-step support & 1 & 0 & yes \\
+Nucleus (top-$p$) sampling & $\Psi$ & per-step support & 1 & 0 & yes \\
+Beam search & $\Psi$ & sequence-level objective & $b$ & 0 & no \\
+Constrained decoding & $\Psi$ & per-step support & 1 & 0 & either \\
+\midrule
+Zero-shot CoT & $\Omega$ & reasoning trace & 1--2 & $O(1)$ & no \\
+Few-shot CoT & $\Phi + \Omega$ & context and trace & 1 & $O(n\bar{\ell}_r)$ & no \\
+Least-to-most prompting & $\Omega$ & trace decomposition & $s$ & $O(s)$ & no \\
+Self-consistency & $\Omega + \Psi$ & trace ensemble & $m$ & 0 & yes \\
+Tree-of-thoughts & $\Omega + \Psi$ & trace search & $O(bd)$ & $O(bd\bar{\ell}_r)$ & either \\
+ReAct & $\Phi + \Omega$ & trace and context & $O(n_a)$ & $O(n_a\bar{\ell}_o)$ & yes \\
+Self-refine & $\Phi + \Omega$ & trace and context & $2c$ & $O(c\bar{\ell}_r)$ & no \\
+\bottomrule
+\end{tabular}
+\label{tab:taxonomy}
+\end{table*}\section{Experimental Setup}
+\label{sec:setup}
+
+\subsection{Design}
+\label{sec:design}
+
+We use a fully crossed factorial design with three factors. The algorithmic factor has six levels: direct answering, zero-shot CoT, few-shot CoT with $n = 4$ exemplars, self-consistency with $m = 8$ over few-shot CoT, ToT with $b = 3$ and $d = 3$, and ReAct with a calculator and a retrieval tool. The lexical factor has four levels: four paraphrases of each template, written by different authors and checked to preserve exemplar count, trace shape, and output format, so that the algorithmic content of the four is identical by construction. The decoding factor has eight levels drawn from $T \in \{0.0, 0.3, 0.7, 1.0\}$ crossed with $\{\text{top-}p=0.9, \text{top-}p=1.0\}$, with top-$k$ fixed at 40 for $T > 0$. Greedy decoding is used as the reference cell. This design is what permits~\eqref{eq:aer} to be estimated rather than assumed.
+
+\subsection{Models}
+\label{sec:models}
+
+We evaluate \textcolor{red}{[list the models and parameter counts, e.g.\ three open-weight instruction-tuned models spanning roughly an order of magnitude in size]}. We use open-weight models throughout so that token-level log-probabilities are available;~\eqref{eq:divergence} and Proposition 1 both require them, and most hosted APIs do not expose the full distribution. All weights are frozen; no fine-tuning is performed at any stage.
+
+\subsection{Tasks and metrics}
+\label{sec:tasks}
+
+Four tasks cover the regimes in which prompting techniques are usually claimed to help: grade-school arithmetic (GSM8K \cite{b18}), commonsense multiple choice (CommonsenseQA \cite{b19}), program synthesis (HumanEval \cite{b20}), and abstractive summarisation. We sample $[n]$ items per task under a fixed random seed and hold the sample constant across every cell. Accuracy is exact match for the first two tasks, pass@1 for the third, and ROUGE-L for the fourth. Alongside accuracy we record output diversity (distinct-2 and self-BLEU over the samples in a cell), the per-token divergence $D_{\Phi}$ of~\eqref{eq:divergence}, the realised nucleus width $\kappa$, generated tokens, forward passes, and wall-clock latency.
+
+\subsection{Protocol}
+\label{sec:protocol}
+
+Every cell is run with \textcolor{red}{[$s$]} seeds. Answers are extracted with a single regular expression shared by all conditions, so that differences in parsing cannot masquerade as differences in reasoning; parse failures are counted as errors and reported separately. Confidence intervals come from a paired bootstrap over items with 10,000 resamples, and comparisons across the algorithmic factor are corrected with the Holm--Bonferroni procedure. Variance components for~\eqref{eq:aer} are estimated by restricted maximum likelihood with items treated as a random effect. Prompts, seeds, raw generations, and analysis scripts are released at \textcolor{red}{[repository URL]}.
+
+\begin{table}[htbp]
+\caption{Accuracy by Algorithmic Level, Averaged over Four Paraphrases}
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Method} & \textbf{GSM8K} & \textbf{CSQA} & \textbf{HumanEval} & \textbf{Summ.} \\
+\midrule
+Direct & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Zero-shot CoT & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Few-shot CoT & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Self-consistency & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Tree-of-thoughts & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+ReAct & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+\midrule
+Paraphrase range & \textcolor{BrickRed}{[$\pm$]} & \textcolor{BrickRed}{[$\pm$]} & \textcolor{BrickRed}{[$\pm$]} & \textcolor{BrickRed}{[$\pm$]} \\
+AER & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+\bottomrule
+\end{tabular}
+\label{tab:accuracy}
+\end{table}
+
+\section{Results and Analysis}
+\label{sec:results}
+
+Section VI reports measurements from the design of Section V. Values marked in red must be replaced with the figures produced by your own runs.
+
+\subsection{Algorithmic versus lexical variation}
+\label{sec:alg-vs-lex}
+
+Table~\ref{tab:accuracy} reports accuracy for each algorithmic level, averaged over the four paraphrases and reported at the reference decoding setting, with the spread across paraphrases given as a range. The comparison that bears on \textbf{H1} is between the vertical spread of the table---movement between cells of the taxonomy---and the horizontal spread within a row. On \textcolor{BrickRed}{[task]} the algorithmic factor moves accuracy by \textcolor{BrickRed}{[$\Delta$ points]} while paraphrasing moves it by \textcolor{BrickRed}{[$\delta$ points]}, giving AER = \textcolor{BrickRed}{[value]}; the corresponding figures for the remaining tasks are \textcolor{BrickRed}{[summarise]}. \textbf{H1} is therefore \textcolor{BrickRed}{[supported / partially supported / not supported]}.
+
+\subsection{Interaction with the decoding policy}
+\label{sec:decoding-interaction}
+
+Table~\ref{tab:decoding-sweep} sweeps temperature and nucleus threshold for three algorithmic levels. Two patterns are of interest. First, the optimal temperature is not shared across methods: greedy CoT peaks at \textcolor{BrickRed}{[$T$]}, whereas self-consistency requires $T > 0$ by construction and peaks at \textcolor{BrickRed}{[$T$]}, which is the interaction predicted in \textbf{H2}. Second, the accuracy cost of a badly chosen temperature is \textcolor{BrickRed}{[magnitude]}, which is \textcolor{BrickRed}{[larger / smaller]} than the gap between adjacent methods in Table~\ref{tab:accuracy}. A technique reported at a single undocumented decoding setting is therefore \textcolor{BrickRed}{[characterise the resulting ambiguity]}.
+
+\begin{table}[htbp]
+\caption{Accuracy under Decoding Sweep (GSM8K)}
+\centering
+\small
+\begin{tabular}{llccc}
+\toprule
+\textbf{top-$p$} & \textbf{$T$} & \textbf{Few-shot CoT} & \textbf{Self-cons.} & \textbf{ToT} \\
+\midrule
+1.0 & 0.0 & \textcolor{BrickRed}{[-]} & n/a & \textcolor{BrickRed}{[-]} \\
+1.0 & 0.3 & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+1.0 & 0.7 & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+1.0 & 1.0 & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+0.9 & 0.3 & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+0.9 & 0.7 & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+0.9 & 1.0 & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+\bottomrule
+\end{tabular}
+\label{tab:decoding-sweep}
+\end{table}
+
+\subsection{Distributional measurements}
+\label{sec:distributional}
+
+Table~\ref{tab:distributional} reports the per-token divergence $D_{\Phi}$ between each prompt condition and the direct-answering baseline, the mean realised nucleus width $\bar{\kappa}$, and output diversity. The measurement that matters here is the relationship between $D_{\Phi}$ and accuracy: \textcolor{BrickRed}{[state whether the two are monotonically related, and identify any condition with high divergence but no accuracy gain]}. A condition of that kind is a prompt that moves the distribution without moving it usefully, which is precisely the case that raw benchmark numbers cannot distinguish from an inert prompt.
+
+\begin{table}[htbp]
+\caption{Distributional Effect Relative to Direct Answering ($D_{\Phi}$ in nats/token)}
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Condition} & \textbf{$D_{\Phi}$} & \textbf{$\bar{\kappa}$} & \textbf{dist-2} & \textbf{s-BLEU} \\
+\midrule
+Paraphrase (mean) & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Zero-shot CoT & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Few-shot CoT & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Retrieval prompt & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+\bottomrule
+\end{tabular}
+\label{tab:distributional}
+\end{table}
+
+\subsection{Cost}
+\label{sec:cost-results}
+
+Table~\ref{tab:cost} converts accuracy into accuracy per thousand generated tokens. Ranking the methods by raw accuracy and by cost-adjusted accuracy gives \textcolor{BrickRed}{[the same / a different]} ordering; in particular \textcolor{BrickRed}{[name the method whose ranking changes most]}. Under a fixed token budget the preferred method is \textcolor{BrickRed}{[method]}, which \textcolor{BrickRed}{[does / does not]} match the accuracy-optimal choice.
+
+\begin{table}[htbp]
+\caption{Accuracy per Thousand Generated Tokens (GSM8K)}
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & \textbf{Acc.} & \textbf{Tok./item} & \textbf{Acc./1k tok} \\
+\midrule
+Direct & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Zero-shot CoT & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Few-shot CoT & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Self-consistency & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+Tree-of-thoughts & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+ReAct & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} & \textcolor{BrickRed}{[-]} \\
+\bottomrule
+\end{tabular}
+\label{tab:cost}
+\end{table}
+
+\subsection{Error analysis}
+\label{sec:error}
+
+We hand-label \textcolor{BrickRed}{[$n$]} errors per method into four categories: retrieval or knowledge failure, arithmetic slip, invalid reasoning step, and formatting or parse failure. The distribution over categories is \textcolor{BrickRed}{[summarise]}. Two predictions of Section IV are checkable here. Proposition 3 implies that self-consistency should reduce arithmetic slips, which are high-variance and low-margin, while leaving invalid reasoning steps largely untouched; the observed change is \textcolor{BrickRed}{[state]}. The framing of ReAct as external conditioning implies that it should reduce knowledge failures specifically; the observed change is \textcolor{BrickRed}{[state]}.
+
+\section{Discussion}
+\label{sec:discussion}
+
+The framework in Section IV treats a prompt as a control input, and the experiments are constructed to test whether that view has empirical consequences. Three points deserve emphasis.
+
+Reported gains carry a decoding configuration whether or not it is written down. Because trace-space and decoding-space operators interact, a chain-of-thought result at $T = 0$ and the same result at $T = 0.7$ are different measurements of different quantities. The practical recommendation that follows is narrow and cheap: report $T$, $k$, $p$, and $m$ alongside every prompting result, and report the reference cell against which a gain is measured.
+
+Divergence is necessary but not sufficient. A prompt that leaves $\hat{\Delta}_{t} \approx 0$ cannot change model behaviour, so a low $D_{\Phi}$ is decisive negative evidence about a proposed technique. The converse does not hold. High divergence with no accuracy gain is common, and it identifies prompts that redistribute probability mass without concentrating it on better answers---a failure mode that accuracy alone reports as a null result and that $D_{\Phi}$ reports as a mechanism.
+
+Where a technique's ceiling lies is determined by the operator class it belongs to. Proposition 3 shows that self-consistency converges to the marginal mode and can do no better, so it cannot rescue an item whose marginal mode is wrong; the fix has to come from prompt space, which changes the distribution, or from trace space with an external signal, as in ToT and ReAct. Reading Table~\ref{tab:taxonomy} as a design space rather than a list makes this kind of diagnosis routine: identify which operator the failure implicates, then choose a technique from that class.
+
+A consequence for practitioners is that the search for a better wording is usually the wrong first move. If the algorithmic effect ratio is high, the returns to rewording are bounded and the effort is better spent selecting an operator class and tuning its decoding parameters. If it is low, the reported technique is fragile and should be re-validated on the exact wording that will ship.
+
+\section{Limitations and Threats to Validity}
+\label{sec:limitations}
+
+Several limitations qualify these conclusions.
+
+\textit{Model coverage.} We evaluate open-weight models because token-level log-probabilities are required by~\eqref{eq:divergence}. The largest proprietary models may respond differently, and prompting effects are known to vary with scale; our conclusions should be read as applying to the scales we test.
+
+\textit{Paraphrase construction.} The lexical factor depends on the claim that our four paraphrases preserve algorithmic structure. We control exemplar count, trace shape, and output format, but a paraphrase can still alter tokenisation boundaries or lexical overlap with pretraining data in ways we do not measure. This makes $\sigma_{\text{lex}}^{2}$ in~\eqref{eq:aer} an upper bound on the purely lexical contribution, and hence AER a conservative estimate.
+
+\textit{Task coverage.} Four tasks cannot represent the space of LLM applications. Open-ended generation, multi-turn dialogue, and agentic workflows with long horizons are absent, and the last of these is where trace-space operators are most heavily used in practice.
+
+\textit{Value estimation in ToT.} The ToT results depend on a hand-specified value function. A better $v$ would raise the ToT rows in every table, so those numbers are a lower bound on what the method can achieve rather than a measurement of the method itself.
+
+\textit{Contamination.} Public benchmarks may appear in pre-training corpora. Contamination would inflate absolute accuracies but should affect all cells of the design roughly equally, leaving the contrasts on which \textbf{H1} and \textbf{H2} depend comparatively robust.
+
+\textit{Statistical power.} With \textcolor{BrickRed}{[$n$]} items per task and \textcolor{BrickRed}{[$s$]} seeds, differences smaller than roughly \textcolor{BrickRed}{[$\epsilon$]} points are not resolvable, and we do not claim them.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have argued that prompt engineering techniques are best analysed as algorithmic operations on the conditional distribution an LLM defines over outputs, and we have given a taxonomy that classifies techniques by whether they act on the prompt, the decoding policy, or the reasoning trace. The formal treatment yields concrete statements: truncation operators bound per-step entropy in ways that differ between top-$k$ and nucleus sampling, greedy chain-of-thought targets the joint mode while self-consistency targets the marginal mode, and the gap between the two accounts for the benefit of voting. A factorial experiment separating lexical from algorithmic variation supplies the corresponding measurements, and the algorithmic effect ratio summarises them in a single number.
+
+The practical recommendation is that prompt engineering results be reported with the decoding configuration, the reference cell, and a divergence measurement attached, so that a reader can tell which operator produced a gain. Future work should extend the framework to multi-turn and agentic settings, where traces are long and the environment supplies part of the conditioning context, and should investigate whether the algorithmic effect ratio predicts how well a prompting technique transfers between models.
+
+\section*{Acknowledgment}
+\label{sec:acknowledgment}
+
+\textcolor{BrickRed}{[Add acknowledgements and funding statement before submission.]}
+
+\begin{thebibliography}{00}
+
+\bibitem{b1} T. Brown \textit{et al.}, ``Language models are few-shot learners,'' in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.\ 33, 2020, pp.\ 1877--1901.
+
+\bibitem{b2} S. Min, X. Lyu, A. Holtzman, M. Artetxe, M. Lewis, H. Hajishirzi, and L. Zettlemoyer, ``Rethinking the role of demonstrations: What makes in-context learning work?,'' in \textit{Proc. Conf. Empir. Methods Nat. Lang. Process. (EMNLP)}, 2022, pp.\ 10748--10760.
+
+\bibitem{b3} J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter, F. Xia, E. H. Chi, Q. V. Le, and D. Zhou, ``Chain-of-thought prompting elicits reasoning in large language models,'' in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.\ 35, 2022, pp.\ 24824--24837.
+
+\bibitem{b4} X. Wang, J. Wei, D. Schuurmans, Q. Le, E. Chi, S. Narang, A. Chowdhery, and D. Zhou, ``Self-consistency improves chain of thought reasoning in language models,'' in \textit{Proc. Int. Conf. Learn. Represent. (ICLR)}, 2023.
+
+\bibitem{b5} S. Yao, D. Yu, J. Zhao, I. Shafran, T. L. Griffiths, Y. Cao, and K. Narasimhan, ``Tree of thoughts: Deliberate problem solving with large language models,'' in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.\ 36, 2023, pp.\ 11809--11822.
+
+\bibitem{b6} S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. R. Narasimhan, and Y. Cao, ``ReAct: Synergizing reasoning and acting in language models,'' in \textit{Proc. Int. Conf. Learn. Represent. (ICLR)}, 2023.
+
+\bibitem{b7} P. Lewis \textit{et al.}, ``Retrieval-augmented generation for knowledge-intensive NLP tasks,'' in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.\ 33, 2020, pp.\ 9459--9474.
+
+\bibitem{b8} A. Holtzman, J. Buys, L. Du, M. Forbes, and Y. Choi, ``The curious case of neural text degeneration,'' in \textit{Proc. Int. Conf. Learn. Represent. (ICLR)}, 2020.
+
+\bibitem{b9} T. Kojima, S. S. Gu, M. Reid, Y. Matsuo, and Y. Iwasawa, ``Large language models are zero-shot reasoners,'' in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.\ 35, 2022, pp.\ 22199--22213.
+
+\bibitem{b10} Y. Lu, M. Bartolo, A. Moore, S. Riedel, and P. Stenetorp, ``Fantastically ordered prompts and where to find them: Overcoming few-shot prompt order sensitivity,'' in \textit{Proc. Annu. Meeting Assoc. Comput. Linguist. (ACL)}, 2022, pp.\ 8086--8098.
+
+\bibitem{b11} Z. Zhao, E. Wallace, S. Feng, D. Klein, and S. Singh, ``Calibrate before use: Improving few-shot performance of language models,'' in \textit{Proc. Int. Conf. Mach. Learn. (ICML)}, 2021, pp.\ 12697--12706.
+
+\bibitem{b12} A. Madaan \textit{et al.}, ``Self-refine: Iterative refinement with self-feedback,'' in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.\ 36, 2023, pp.\ 46534--46594.
+
+\bibitem{b13} A. Fan, M. Lewis, and Y. Dauphin, ``Hierarchical neural story generation,'' in \textit{Proc. Annu. Meeting Assoc. Comput. Linguist. (ACL)}, 2018, pp.\ 889--898.
+
+\bibitem{b14} C. Meister, T. Pimentel, G. Wiher, and R. Cotterell, ``Locally typical sampling,'' \textit{Trans. Assoc. Comput. Linguist.}, vol.\ 11, pp.\ 102--121, 2023.
+
+\bibitem{b15} P. Liu, W. Yuan, J. Fu, Z. Jiang, H. Hayashi, and G. Neubig, ``Pre-train, prompt, and predict: A systematic survey of prompting methods in natural language processing,'' \textit{ACM Comput. Surv.}, vol.\ 55, no.\ 9, pp.\ 1--35, 2023.
+
+\bibitem{b16} S. Schulhoff \textit{et al.}, ``The prompt report: A systematic survey of prompting techniques,'' 2024, arXiv:2406.06608. [Online]. Available: \url{https://arxiv.org/abs/2406.06608}
+
+\bibitem{b17} Y. Zhou, A. I. Muresanu, Z. Han, K. Paster, S. Pitis, H. Chan, and J. Ba, ``Large language models are human-level prompt engineers,'' in \textit{Proc. Int. Conf. Learn. Represent. (ICLR)}, 2023.
+
+\bibitem{b18} K. Cobbe \textit{et al.}, ``Training verifiers to solve math word problems,'' 2021, arXiv:2110.14168. [Online]. Available: \url{https://arxiv.org/abs/2110.14168}
+
+\bibitem{b19} A. Talmor, J. Herzig, N. Lourie, and J. Berant, ``CommonsenseQA: A question answering challenge targeting commonsense knowledge,'' in \textit{Proc. Conf. North Amer. Chapter Assoc. Comput. Linguist. (NAACL)}, 2019, pp.\ 4149--4158.
+
+\bibitem{b20} M. Chen \textit{et al.}, ``Evaluating large language models trained on code,'' 2021, arXiv:2107.03374. [Online]. Available: \url{https://arxiv.org/abs/2107.03374}
+
+\end{thebibliography}
+
+\vspace{12pt}
+
+\end{document}
