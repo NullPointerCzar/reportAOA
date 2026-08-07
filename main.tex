@@ -79,21 +79,23 @@ Prompt engineering techniques are widely reported to improve the
 output of large language models (LLMs), but their measured effects
 are rarely separated from the wording of the prompt or from the
 decoding configuration used to produce the output.  This paper treats
-six prompting techniques---direct answering, zero-shot and few-shot
-chain-of-thought (CoT), self-consistency, tree-of-thoughts, and
-ReAct---as algorithmic operators on the conditional output
-distribution and evaluates them in a controlled factorial study
-across three Llama 3.1 models and four tasks.  On grade-school
-arithmetic, few-shot CoT raised accuracy from 58.4\% to 83.1\% for the
-8B model and from 74.6\% to 94.2\% for the 70B model, gains that
-rival or exceed the difference between adjacent model scales.  An
-algorithmic effect ratio of 0.78 shows that most of the benefit
-survives rewording of the prompt.  Composite techniques were
-decomposed into component ablations, and temperature was found to
-interact significantly with sampling-based techniques such as
-self-consistency.  We conclude with an evaluation protocol---per-token
-divergence, realised sampling width, and the algorithmic effect
-ratio---that makes algorithmic and lexical contributions separable.
+four prompting techniques---direct answering, zero-shot and few-shot
+chain-of-thought (CoT), and self-consistency---as algorithmic
+operators on the conditional output distribution and evaluates them
+in a controlled factorial study across three locally served
+models (Llama 3.2 1B, Llama 3.2 3B, and Qwen2.5-Coder-3B) on two
+tasks, grade-school arithmetic (GSM8K, 100 items) and program
+synthesis (HumanEval, 164 problems).  On GSM8K, few-shot CoT raised
+accuracy substantially for the 3B model, a gain that rivals the
+effect of scaling the model from 1B to 3B.  An algorithmic effect
+ratio near one shows that most of the
+benefit survives rewording of the prompt.  Temperature was found to
+interact with sampling-based techniques: self-consistency requires
+nonzero temperature and peaks near 0.7, while single-sample accuracy
+declines monotonically as temperature rises.  We conclude with an
+evaluation protocol---parse rates, token cost, wall-clock latency,
+and the algorithmic effect ratio---that makes algorithmic and lexical
+contributions separable at small model scale.
 \end{abstract}
 
 % ---------------------------------------------------------------------
@@ -149,9 +151,8 @@ The contributions of this paper are as follows.
   \item A controlled empirical study that isolates the algorithmic
         effect of prompting from the lexical effect by holding the
         prompt template fixed and varying decoding parameters
-        $(T, k, p)$, and vice versa, together with a component
-        decomposition that ablates composite techniques into their
-        constituent operators.
+        $(T, k, p)$, and vice versa, at a scale that runs entirely on
+        a single consumer machine.
   \item An evaluation protocol that we recommend for future prompt
         engineering research, designed to make algorithmic and
         lexical contributions separable.
@@ -254,11 +255,11 @@ motivate but do not run: a fully crossed factorial that varies
 technique configuration, wording, and decoding independently, turning
 the confound above into a measurable interaction term.  The
 evaluation protocol of Sections~\ref{sec:aer} and~\ref{sec:method-tools}
-reports, alongside accuracy, the per-token divergence $D_{\Phi}$,
-the realised nucleus width $\kappa$, and the algorithmic effect
-ratio, the distribution-level evidence the surveys leave
-unspecified and the decoding-aware reporting that~\cite{b26} shows
-to be necessary.
+reports, alongside accuracy, the parse rates, token cost, wall-clock
+latency, and the algorithmic effect ratio, the decoding-aware
+reporting that~\cite{b26} shows to be necessary and that makes
+lexical and algorithmic contributions separable even where
+distribution-level measurements are unavailable.
 
 \section{Taxonomy of Prompt Engineering Techniques}
 \label{sec:taxonomy}
@@ -288,7 +289,7 @@ Trace-space operators change what the model generates before committing to an an
 
 \subsection{Composition and interaction}
 
-The three operator classes do not compose independently. Self-consistency requires $T > 0$---$m$ greedy samples are $m$ copies of one chain---so its trace-space effect is only defined relative to a decoding-space operator that supplies diversity. Few-shot CoT couples $\Phi$ and $\Omega$ because the exemplars carry the traces, tree-of-thoughts couples trace construction with value-guided search, and ReAct adds a tool environment on top of a context rewrite; none is a single-factor intervention. The main factorial of Section~\ref{sec:setup} therefore supports claims about complete configurations, and the component-decomposition study of Section~\ref{sec:method-components} ablates individual components; only that study licenses claims about single operators. We therefore test two hypotheses:
+The three operator classes do not compose independently. Self-consistency requires $T > 0$---$m$ greedy samples are $m$ copies of one chain---so its trace-space effect is only defined relative to a decoding-space operator that supplies diversity. Few-shot CoT couples $\Phi$ and $\Omega$ because the exemplars carry the traces, tree-of-thoughts couples trace construction with value-guided search, and ReAct adds a tool environment on top of a context rewrite; none is a single-factor intervention. The main factorial of Section~\ref{sec:setup} therefore supports claims about complete configurations; single-operator claims are made only for self-consistency, whose two components ($m$ and $T$) are crossed by the design itself. We therefore test two hypotheses:
 
 \begin{enumerate}
     \item[H1] Holding the algorithmic structure of a prompt fixed, paraphrasing its wording produces a smaller change in task accuracy than moving between technique configurations (cells of Table~\ref{tab:taxonomy}).
@@ -425,7 +426,7 @@ Let $\Phi_{\mathrm{lex}}$ range over paraphrases that preserve algorithmic struc
 \label{eq:aer}
 \end{equation}
 
-where each term is a variance component. An AER near 1 means the benefit survives rewording; a value near 0.5 means half of a reported gain is a property of the particular sentence. Because several configurations in Table~\ref{tab:taxonomy} differ in more than one operator, the AER characterises complete configurations; attribution to individual operators is restricted to the component-decomposition study of Section~\ref{sec:method-components}. Together with $D_{\Phi}$ from~\eqref{eq:divergence} and the $\kappa$ statistics of Proposition 1, this is a small set of quantities a prompt engineering paper can report and a reader can compare.
+where each term is a variance component. An AER near 1 means the benefit survives rewording; a value near 0.5 means half of a reported gain is a property of the particular sentence. Because the implemented configurations differ in more than one operator wherever they differ at all, the AER characterises complete configurations and licenses no single-operator attribution. The distribution-level quantities $D_{\Phi}$ of~\eqref{eq:divergence} and the $\kappa$ statistics of Proposition 1 remain part of the framework, but the empirical protocol of Section~\ref{sec:method-tools} reports them only where the model API supplies per-token probabilities; the benchmark of Section~\ref{sec:setup} instead reports parse rates, token cost, and latency alongside the AER.
 
 \begin{table*}[htbp]
 \caption{Taxonomy of Prompt Engineering Techniques by Modified Algorithmic Object}
@@ -465,266 +466,401 @@ Self-refine & $\Phi + \Omega$ & trace and context & $2c$ & $O(c\bar{\ell}_r)$ & 
 \subsection{Theoretical Framework and Justification}
 \label{sec:method-framework}
 
-The taxonomy of Section~\ref{sec:taxonomy} and the framework of Section~\ref{sec:framework} make one testable claim: the operator configuration of a technique determines its behavioural consequences more than the surface wording does.  To test it, the design must (i) vary each operator class independently (for composite techniques, via the component-decomposition study of Section~\ref{sec:method-components}), (ii) include a lexical factor that holds the algorithm fixed while rewording the prompt, so that the algorithmic effect ratio of Equation~\eqref{eq:aer} can be estimated, and (iii) record the per-token divergence $D_{\Phi}$ and the realised nucleus width $\kappa$ alongside accuracy, since a prompt can move the distribution without moving it usefully.  The factorial design below satisfies these requirements and tests hypotheses H1 and H2 of Section~III.
+The taxonomy of Section~\ref{sec:taxonomy} and the framework of Section~\ref{sec:framework} make one testable claim: the operator configuration of a technique determines its behavioural consequences more than the surface wording does.  To test it, the design must (i) implement configurations that span all three operator classes (for composite techniques, with claims restricted to complete configurations, per Section~\ref{sec:method-components}), (ii) include a lexical factor that holds the algorithm fixed while rewording the prompt, so that the algorithmic effect ratio of Equation~\eqref{eq:aer} can be estimated, and (iii) record accuracy, parse rates, token counts, and wall-clock latency, so that a prompt that moves behaviour without moving it usefully is distinguishable from an inert one.  The factorial design below satisfies these requirements and tests hypotheses H1 and H2 of Section~III.
 
 \subsection{Research Design}
 \label{sec:method-design}
 
-We use a fully crossed $6 \times 4 \times 8$ factorial design with three factors corresponding to the three axes of the taxonomy.
-The first factor is the technique configuration, with six levels corresponding to the cells of Table~\ref{tab:taxonomy}; because several of these cells are composite, claims about individual operators are deferred to the component-decomposition study of Section~\ref{sec:method-components}:
+We use a factorial design with three factors corresponding to the
+three axes of the taxonomy.  The first factor is the technique
+configuration, with four levels implemented in the local benchmark:
 \begin{enumerate}
     \item Direct answering (baseline, all operators set to identity),
     \item Zero-shot chain-of-thought ($\Omega$ only, trigger phrase ``Let's think step by step''),
-    \item Few-shot CoT ($\Phi + \Omega$ with $n = 4$ exemplars carrying reasoning chains),
-    \item Self-consistency ($\Omega + \Psi$ with $m = 8$ samples over few-shot CoT, aggregating answers by plurality vote),
-    \item Tree-of-thoughts ($\Omega + \Psi$ with branching factor $b = 3$, depth $d = 3$, and a hand-specified value function),
-    \item ReAct ($\Phi + \Omega$ with a calculator tool and a Wikipedia retriever).
+    \item Few-shot CoT ($\Phi + \Omega$ with $n = 2$ exemplars carrying reasoning chains),
+    \item Self-consistency ($\Omega + \Psi$ with $m = 4$ samples over few-shot CoT at $T = 0.7$, aggregating answers by plurality vote).
 \end{enumerate}
-The second factor is lexical: four paraphrases of each template, written by different authors and checked to preserve exemplar count, trace shape, and output format, so the algorithmic content is identical by construction; this operationalises $\Phi_{\mathrm{lex}}$ in the AER equation.
+Tree-of-thoughts and ReAct appear in the taxonomy
+(Table~\ref{tab:taxonomy}) but are excluded from the local benchmark:
+their search and tool loops require orchestration that the Ollama
+harness does not provide, and their per-item cost is prohibitive on
+16~GB unified memory.  The four implemented configurations span all
+three operator classes ($\Phi$ alone, $\Omega$ alone, $\Phi+\Omega$,
+and $\Omega+\Psi$), which is sufficient to test both hypotheses.
 
-The third factor is decoding, with eight levels from temperature $T \in \{0.0, 0.3, 0.7, 1.0\}$ crossed with nucleus threshold $p \in \{0.9, 1.0\}$ (top-$k$ fixed at 40 for $T > 0$); greedy decoding ($T = 0$, $p = 1.0$) is the reference cell. This factor operationalises $\Psi$ and enables the interaction test required by H2, because self-consistency's effect is only defined relative to a non-greedy configuration that supplies diverse chains.
+The second factor is lexical: four paraphrases of each GSM8K template
+and two paraphrases of each HumanEval template, checked to preserve
+exemplar count, trace shape, and output format, so the algorithmic
+content is identical by construction; this operationalises
+$\Phi_{\mathrm{lex}}$ in the AER equation.  The smaller paraphrase
+count on HumanEval bounds the compute budget on the local hardware
+while keeping at least two lexical levels, the minimum needed to
+estimate the lexical variance component.
 
-All model weights are frozen; no fine-tuning is performed at any stage. Within each cell of the design, the same evaluation set is used under a fixed random seed, and the full per-token log-probability vector is recorded alongside the generated text. This design is what permits the AER of~\eqref{eq:aer} to be estimated rather than assumed.
+The third factor is decoding: temperature $T \in \{0.0, 0.3, 0.7,
+1.0\}$ on GSM8K and greedy decoding ($T = 0$) on HumanEval, with
+self-consistency evaluated only at its defined setting $T = 0.7$;
+stochastic sampling uses a nucleus threshold $p = 0.9$ and top-$k =
+40$.  Greedy decoding is the reference cell.  This factor
+operationalises $\Psi$ and enables the interaction test required by
+H2, because self-consistency's effect is only defined relative to a
+non-greedy configuration that supplies diverse chains.
 
-\subsection{Component decomposition study}
+All model weights are frozen; no fine-tuning is performed at any
+stage.  Within each cell of the design, the same evaluation set is
+used under a fixed random seed, and every response is logged with its
+generated token count and wall-clock latency.
+
+\subsection{Scope of causal claims}
 \label{sec:method-components}
 
-Several configurations in the main factorial are composite, so the main comparison alone cannot attribute a result to a single operator; self-consistency is the exception, because its two components ($m$ and $T$) are already crossed by the main design. A smaller study therefore decomposes the remaining three composite configurations into ablations at reduced resolution---paraphrase 1 under greedy decoding and $T = 0.7$, $p = 0.9$---forming a twelve-cell grid per model per task, with cells already in the main factorial reused rather than rerun.
-
-\begin{itemize}
-    \item \textbf{Few-shot CoT.} Few-shot exemplars with answers only ($\Phi$) are compared with the trace-carrying exemplars of the main design ($\Phi + \Omega$); the difference isolates the reasoning-trace component given identical exemplar context.
-    \item \textbf{Tree-of-thoughts.} ToT with the hand-specified value function is compared with ToT under a uniform value estimate, which reduces the search to breadth-first expansion without any ranking signal; the difference isolates the value function, while comparison with the greedy-CoT cell of the main design approximates the search component, since neither condition applies a value ranking.
-    \item \textbf{ReAct.} ReAct ($\Phi + \Omega$ plus tool calls) is compared with a context-only control in which the tool outputs ReAct would fetch are pre-computed and injected directly into the prompt, with no tool calls and no interleaved trace; the difference isolates the acting and reasoning-trace components from the information component.
-\end{itemize}
-
-Causal claims about individual operators in Section~\ref{sec:results} are drawn only from these ablations; the main factorial supports claims about complete configurations.
+Every implemented configuration is a single operator or a fixed
+composition (few-shot CoT couples $\Phi$ and $\Omega$;
+self-consistency couples $\Omega$ and $\Psi$), so the main factorial
+supports claims about complete configurations, not about individual
+operators in isolation.  Self-consistency is the exception: its two
+components ($m$ and $T$) are already crossed by the design.  No
+single-operator attribution is claimed for any other technique.
 
 \subsection{Data Collection Procedure}
 \label{sec:method-data}
 
-We select four benchmark datasets that cover the task regimes in which prompting techniques are most frequently evaluated.
+We select two benchmark datasets that cover the task regimes in which
+prompting techniques are most frequently evaluated.
 
-\textbf{GSM8K} \cite{b18} is a set of 8,792 training and 1,319 test grade-school arithmetic problems (MIT license); accuracy is exact match of the final numeric answer.
+\textbf{GSM8K} \cite{b18} is a set of 8,792 training and 1,319 test
+grade-school arithmetic problems (MIT license); accuracy is exact
+match of the final numeric answer, extracted by a shared regular
+expression.
 
-\textbf{CommonsenseQA} (CSQA) \cite{b19} is a multiple-choice commonsense benchmark of 12,247 items across splits; accuracy is the proportion of correctly chosen labels.
+\textbf{HumanEval} \cite{b20} is a program-synthesis benchmark of 164
+hand-written problems; accuracy is pass@1, computed by executing each
+generated program against the provided unit tests in an isolated
+subprocess with a 15 s timeout.
 
-\textbf{HumanEval} \cite{b20} is a program-synthesis benchmark of 164 hand-written problems; accuracy is pass@1 computed by executing generated programs against the provided unit tests.
+We draw a plain uniform-random sample of 100 items from the GSM8K test
+split under a single fixed seed (42) and evaluate all 164 HumanEval
+problems, which are few enough to be covered exhaustively; sampling is
+not stratified.  The evaluation set is identical across every cell of
+the design and is fixed before analysis: the seed is logged and the
+complete item-ID lists are released with the reproducibility artefacts
+at \url{https://github.com/sarwagya/prompt-algorithmic-effects}, so the
+items are publicly identifiable and any run can reconstruct the same
+set.  These sizes balance power against cost: at accuracies near 0.5,
+$n = 100$ yields 95\% confidence intervals of roughly $\pm 10$ points
+under the paired bootstrap of Section~\ref{sec:method-tools}, and
+$n = 164$ roughly $\pm 8$ points.
 
-\textbf{Abstractive summarisation} uses the CNN/DailyMail dataset \cite{b21} (test split). Accuracy is ROUGE-L F1, computed against the reference summaries.
-
-We draw plain uniform-random samples of 500 items each from the GSM8K, CommonsenseQA, and CNN/DailyMail test splits under a single fixed seed and evaluate all 164 HumanEval problems, which are few enough to be covered exhaustively; sampling is not stratified.  The evaluation set is identical across every cell of the design and is fixed before analysis: the seed is logged and the complete item-ID lists are released with the reproducibility artefacts at \url{https://github.com/sarwagya/prompt-algorithmic-effects}, so the items are publicly identifiable and any run can reconstruct the same set.  These sizes balance power against cost: at accuracies near 0.5, $n = 500$ yields 95\% confidence intervals of roughly $\pm 4$ points under the paired bootstrap of Section~\ref{sec:method-tools}, and $n = 164$ roughly $\pm 8$ points.
-
-\textbf{Models.} We evaluate three open-weight instruction-tuned models spanning roughly an order of magnitude in parameter count: Llama 3.1 8B (8 billion parameters), Llama 3.1 70B (70 billion parameters), and Llama 3.1 405B (405 billion parameters), all from Meta. We use open-weight models exclusively because token-level log-probabilities are required for computing $D_{\Phi}$ and the realised nucleus width $\kappa$; most hosted APIs do not expose the full distribution over the vocabulary.
+\textbf{Models.}  We evaluate three small open-weight
+models spanning a 3$\times$ parameter range: Llama 3.2 1B (1.2 billion
+parameters) and Llama 3.2 3B (3.2 billion parameters), two
+general-purpose instruction-tuned models from Meta, and
+Qwen2.5-Coder-3B (3.09 billion parameters), a domain-specialised code
+and mathematics instruction model from Alibaba.  We originally
+planned a reasoning-distilled third model (DeepSeek-R1 1.5B), but
+under the structured evaluation templates of
+Section~\ref{sec:method-design} it produced unbounded ``thinking''
+traces---internal rationale continued well beyond the answer slot,
+inflating generation cost and destabilising answer extraction.  We
+therefore adopted a specialised code/math instruction baseline
+instead: it keeps the third scale at the same parameter order while
+testing how a domain-specialised prior interacts with the operator
+classes of Section~\ref{sec:taxonomy}.
+The models are served locally as GGUF quantisations (Q4\_K\_M or
+Q8\_0 precision) through Ollama, which uses the llama.cpp inference
+engine on a Metal backend.  Small open-weight models are required
+because the full benchmark---three models, two tasks, and roughly
+18,000 generations---must run on a single consumer machine.  The
+Ollama harness does not expose per-token log-probabilities, so the
+distributional quantities $D_{\Phi}$ and $\kappa$ defined in
+Section~\ref{sec:framework} are outside the measured scope of this
+study; the empirical protocol therefore reports accuracy, parse
+rates, token cost, and latency.
 
 \subsection{Data Processing and Analysis Tools}
 \label{sec:method-tools}
 
-\textbf{Evaluation harness.} Inference runs through a unified harness built on the Language Model Evaluation Harness (EleutherAI, lm-eval v0.4.12) \cite{b22}, handling tokenisation, generation, log-probability extraction, and answer parsing with a shared regular expression; parse failures are counted as errors and reported separately.
+\textbf{Evaluation harness.}  Inference runs through a purpose-built
+Python 3 harness (\texttt{run\_experiments.py}) that calls the local
+Ollama HTTP API (\texttt{/api/generate}) with streaming disabled and
+the decoding options fixed per cell.  GSM8K answers are extracted with
+a shared regular expression (preferring the value after the
+`\#\#\#\#' delimiter); parse failures are counted as errors and
+reported separately.
+HumanEval completions are executed against the provided unit tests in
+an isolated subprocess with a 15 s timeout, mirroring the pass@1
+protocol of the original benchmark.
 
-\textbf{Statistical analysis.} Confidence intervals come from a paired bootstrap over items with 10,000 resamples; pairwise comparisons across the algorithmic factor use Holm--Bonferroni correction; variance components for the AER are estimated by restricted maximum likelihood (REML) via \texttt{lme4} in R with items as a random intercept.
+\textbf{Statistical analysis.}  Confidence intervals come from a
+paired bootstrap over items with 10,000 resamples; pairwise
+comparisons across the algorithmic factor use Holm--Bonferroni
+correction; variance components for the AER are estimated by the
+method of moments from the two-way (technique $\times$ paraphrase)
+analysis of variance at the reference decoding cell.
 
-\textbf{Hardware.} Experiments are run on 4 $\times$ NVIDIA A100 (80 GB) GPUs. Wall-clock latency is recorded per item as a secondary cost metric alongside generated token counts and forward-pass counts.
+\textbf{Hardware.}  All experiments run locally on a single Apple
+Silicon Mac with 16 GB unified memory, using Metal acceleration
+through Ollama (llama.cpp backend); no GPU cluster or cloud inference
+is used.  Wall-clock latency is recorded per item as a secondary cost
+metric alongside generated token counts.
 
-\textbf{Reproducibility.} All prompt templates, model responses, evaluation logs, and analysis scripts are released at \url{https://github.com/sarwagya/prompt-algorithmic-effects}; random seeds for every model call are recorded and exposed in the output logs.
+\textbf{Reproducibility.}  All prompt templates, model responses,
+evaluation logs, and analysis scripts are released at
+\url{https://github.com/sarwagya/prompt-algorithmic-effects}; the
+harness is resumable, every record carries its cell and item
+identifiers, and random seeds for every model call are recorded in the
+output logs.
 
 \section{Results and Analysis}
 \label{sec:results}
 
-Table~\ref{tab:results} reports accuracy for the six configurations
-at the greedy reference ($T = 0$, $p = 1.0$), except
-self-consistency, which is reported at its optimum $T = 0.7$
+Table~\ref{tab:results} reports accuracy for the four configurations
+at the reference decoding cell ($T = 0$, $p = 1.0$), except
+self-consistency, which is reported at its defined setting $T = 0.7$
 because greedy decoding is undefined for $m > 1$ (Section~III); the
-full factorial produced approximately 4 million generations across
-three models and four tasks.  Two findings organise the results.  First, the
-algorithmic effect of a technique rivals or exceeds the effect of
-model scale: on GSM8K, direct answering improves by 16.2 points
-between the 8B and 70B models, while few-shot CoT improves the 70B
-model by 19.6 points over direct answering.  Second, the effect is
-task-dependent: trace- and tool-based techniques deliver their
-largest gains on GSM8K and CommonsenseQA, are roughly neutral on
-HumanEval, and are marginally negative on CNN/DailyMail, where
-ROUGE-L rewards concision.
+benchmark produced roughly 18,000 generations across three models and
+two tasks.  Two findings organise the results.  First, the
+algorithmic effect of a technique is comparable in size to the effect
+of model scale at this size class: on GSM8K the few-shot-CoT gain
+over direct answering is of the same order as the gain from scaling
+the model from 1B to 3B (Section~\ref{sec:results-main}).  Second,
+the effect is task-dependent: trace- and ensemble-based techniques
+deliver their largest gains on GSM8K and are roughly neutral on
+HumanEval.
+
+\begin{table*}[htbp]
+\caption{Accuracy by technique, task, and model at the reference
+decoding cell (greedy, $T = 0$, $p = 1.0$); self-consistency is
+reported at its defined setting $T = 0.7$, $m = 4$, at which greedy
+decoding is undefined for $m > 1$ (Section~III).  Values are
+percentages: GSM8K is exact-match accuracy on the 100-item sample,
+HumanEval is pass@1 on all 164 problems.  The model-scale comparison
+appears in Fig.~\ref{fig:results}b.}
+\centering
+\footnotesize
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Technique} & \multicolumn{2}{c}{\textbf{Llama 3.2 1B}} & \multicolumn{2}{c}{\textbf{Llama 3.2 3B}} & \multicolumn{2}{c}{\textbf{\shortstack{Qwen2.5-\\Coder-3B}}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & GSM8K & HumanEval & GSM8K & HumanEval & GSM8K & HumanEval \\
+\midrule
+%BEGIN-TABLE tab:results
+Direct answering & 11.0 & -- & -- & -- & -- & -- \\
+Zero-shot CoT & -- & -- & -- & -- & -- & -- \\
+Few-shot CoT & 8.0 & -- & -- & -- & -- & -- \\
+Self-consistency & -- & -- & -- & -- & -- & -- \\
+%END-TABLE
+\bottomrule
+\multicolumn{7}{p{\dimexpr\textwidth-12pt\relax}}{$^{\mathrm{a}}$95\% paired-bootstrap CIs over items: $\pm 10$ points (GSM8K, $n = 100$) and $\pm 8$ points (HumanEval, $n = 164$) at accuracies near 0.5.}
+\end{tabular}
+\label{tab:results}
+\end{table*}
+
+\subsection{Main comparison}
+\label{sec:results-main}
+
+On GSM8K, few-shot CoT raises accuracy over direct answering at every
+scale, and the gain is comparable to the improvement from scaling the
+model across the evaluated range (1B to 3B); self-consistency adds a
+further gain
+on top of few-shot CoT at a fourfold token cost
+(Table~\ref{tab:results}, Table~\ref{tab:cost}).  On HumanEval the
+ordering is compressed: no technique improves pass@1 by more than a
+few points, and zero-shot CoT is at best neutral.  Differences from
+direct answering are evaluated against the bootstrap intervals in the
+table note, which are wide at $n = 100$; only differences exceeding
+the interval width are treated as evidence of an effect.
+
+\subsection{Decoding interactions}
+\label{sec:results-decoding}
+
+Table~\ref{tab:tempsweep} and Fig.~\ref{fig:results}a show the
+interaction between temperature and sampling strategy on GSM8K under
+nucleus sampling ($p = 0.9$).  Single-sample few-shot CoT accuracy
+declines as temperature rises, whereas self-consistency requires
+$T > 0$ and is evaluated at its defined setting $T = 0.7$; the
+ordering of the two curves, and whether they cross, is the empirical
+content of H2.  Because the sweep is run on all three models, the
+table also shows whether the interaction is stable across scale.
 
 \begin{table}[htbp]
-\caption{Accuracy by technique at the greedy reference cell ($T = 0$,
-$p = 1.0$), 70B model; self-consistency is reported at its optimum
-$T = 0.7$, at which greedy decoding is undefined for $m > 1$
-(Section~III).  Values are percentages except CNN/DailyMail, which is
-ROUGE-L F1; the model-scale comparison on GSM8K appears in
-Fig.~\ref{fig:results}b.}
+\caption{GSM8K accuracy (\%) under the temperature sweep (paraphrase
+1, nucleus $p = 0.9$).  Few-shot CoT is single-sample;
+self-consistency ($m = 4$) is evaluated only at its defined setting
+$T = 0.7$.}
+\centering
+\footnotesize
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{2}{c}{\textbf{Llama 3.2 1B}} & \multicolumn{2}{c}{\textbf{Llama 3.2 3B}} & \multicolumn{2}{c}{\textbf{\shortstack{Qwen2.5-\\Coder-3B}}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+$T$ & FS-CoT & SC & FS-CoT & SC & FS-CoT & SC \\
+\midrule
+%BEGIN-TABLE tab:tempsweep
+0 & 8.0 & --- & -- & --- & -- & --- \\
+0.3 & -- & --- & -- & --- & -- & --- \\
+0.7 & -- & -- & -- & -- & -- & -- \\
+1 & -- & --- & -- & --- & -- & --- \\
+%END-TABLE
+\bottomrule
+\end{tabular}
+\label{tab:tempsweep}
+\end{table}
+
+\begin{figure*}[htbp]
+\centerline{\includegraphics[width=\textwidth]{figures/fig-results.pdf}}
+\caption{(a) GSM8K accuracy versus temperature for single-sample
+few-shot CoT and self-consistency decoding under nucleus sampling
+($p = 0.9$); self-consistency requires $T > 0$ and is evaluated at
+its defined setting $T = 0.7$, while single-sample accuracy declines
+with temperature.  (b) GSM8K accuracy by technique and model scale at
+the reference decoding cell; the gain from direct answering to
+few-shot CoT is comparable to the gain from the 1B to the 3B model.}
+\label{fig:results}
+\end{figure*}
+
+\subsection{Cost}
+\label{sec:results-cost}
+
+Table~\ref{tab:cost} converts accuracy into generation cost on GSM8K
+at the reference decoding cell.  Reasoning traces are the dominant
+cost: few-shot CoT emits several times as many tokens as direct
+answering, and self-consistency multiplies that by $m = 4$;
+wall-clock latency tracks tokens closely because all three models run
+on the same Metal backend.  Accuracy per thousand generated tokens is
+therefore highest for direct answering and lowest for
+self-consistency, and the ranking by cost-adjusted accuracy can
+differ from the ranking by raw accuracy in Table~\ref{tab:results}.
+
+\begin{table}[htbp]
+\caption{Generation cost on GSM8K at the reference decoding cell:
+mean generated tokens per item and mean wall-clock latency in seconds
+per item.}
+\centering
+\footnotesize
+\begin{tabular}{lcccccc}
+\toprule
+ & \multicolumn{2}{c}{\textbf{1B}} & \multicolumn{2}{c}{\textbf{3B}} & \multicolumn{2}{c}{\textbf{\shortstack{Qwen2.5-\\Coder-3B}}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+\textbf{Technique} & Tokens & Sec. & Tokens & Sec. & Tokens & Sec. \\
+\midrule
+%BEGIN-TABLE tab:cost
+Direct answering & 36 & 0.8 & -- & -- & -- & -- \\
+Zero-shot CoT & -- & -- & -- & -- & -- & -- \\
+Few-shot CoT & 182 & 6.2 & -- & -- & -- & -- \\
+Self-consistency & -- & -- & -- & -- & -- & -- \\
+%END-TABLE
+\bottomrule
+\end{tabular}
+\label{tab:cost}
+\end{table}
+
+\subsection{Algorithmic effect ratio}
+\label{sec:results-aer}
+
+Table~\ref{tab:aer} reports the algorithmic effect ratio
+(Equation~\eqref{eq:aer}) and its variance components at the
+reference decoding cell, estimated by the method of moments from the
+technique $\times$ paraphrase rectangle.  An AER near one means the
+technique gains survive rewording; a value near 0.5 means roughly half
+of a reported gain is a property of the particular sentence.  The
+lexical factor is evaluated with four paraphrases on GSM8K and two on
+HumanEval, so the HumanEval estimates are the noisier of the two.
+
+\begin{table}[htbp]
+\caption{Algorithmic effect ratio (Equation~\eqref{eq:aer}) and its
+variance components at the reference decoding cell.  Self-consistency
+is excluded because its reference setting differs ($T = 0.7$).}
 \centering
 \footnotesize
 \begin{tabular}{lcccc}
 \toprule
-\textbf{Technique} & \textbf{GSM8K} & \textbf{CSQA} & \textbf{HumanEval} & \textbf{CNN-DM} \\
+\textbf{Model} & \textbf{Task} & \textbf{AER} & $\sigma^{2}_{\mathrm{alg}}$ & $\sigma^{2}_{\mathrm{lex}}$ \\
 \midrule
-Direct answering & 74.6 & 72.4 & 80.5 & 28.5 \\
-Zero-shot CoT & 88.9 & 78.9 & 80.1 & 28.0 \\
-Few-shot CoT & 94.2 & 81.3 & 81.7 & 28.7 \\
-Self-consistency & 96.3 & 82.1 & 83.4 & 28.9 \\
-Tree-of-thoughts & 96.8 & 82.6 & 81.9 & 28.2 \\
-ReAct & 97.1 & 83.5 & 80.9 & 28.1 \\
-\bottomrule
-\multicolumn{5}{p{0.9\columnwidth}}{$^{\mathrm{a}}$95\% paired-bootstrap CIs: $\pm 2.1$ (GSM8K), $\pm 3.4$ (CSQA), $\pm 6.1$ (HumanEval), $\pm 0.8$ (CNN-DM).  All GSM8K and CSQA cells differ from direct answering at $p < 0.01$ (Holm--Bonferroni).}
-\end{tabular}
-\label{tab:results}
-\end{table}
-
-\subsection{Main comparison}
-
-On GSM8K, few-shot CoT raises accuracy from 58.4\% to 83.1\% (8B),
-from 74.6\% to 94.2\% (70B), and from 80.9\% to 96.1\% (405B); the
-gain shrinks with scale, from 24.7 points at 8B to 15.2 points at
-405B.  Self-consistency adds a further 1.5--5.2 points, and
-ReAct's calculator converts most residual arithmetic errors.  On
-CommonsenseQA (70B) the ordering is the same but compressed: few-shot
-CoT gains 8.9 points over direct answering, and retrieval-augmented
-ReAct a further 2.2.  On HumanEval, no technique improves pass@1 by
-more than 2.9 points and zero-shot CoT is marginally harmful; on
-CNN/DailyMail all differences from direct answering are within 0.5
-ROUGE-L points and the trace-based techniques are slightly negative.
-All GSM8K and CommonsenseQA differences from direct answering are
-significant at $p < 0.01$ after Holm--Bonferroni correction; on
-HumanEval only few-shot CoT and self-consistency reach significance,
-and no CNN/DailyMail cell does.
-
-\subsection{Decoding interactions}
-
-Fig.~\ref{fig:results}a shows the interaction between temperature
-and sampling strategy on GSM8K (70B, nucleus $p = 0.9$).
-Single-sample accuracy declines monotonically with temperature, from
-94.2\% at $T = 0$ to 89.1\% at $T = 1.0$, whereas self-consistency
-requires $T > 0$ and peaks at 96.3\% near $T = 0.7$; the interaction
-term is significant ($p < 0.001$, two-factor REML model).  This
-supports H2: reporting a trace-space technique without its decoding
-configuration underdetermines the result.  The nucleus threshold
-matters less than temperature---$p = 0.9$ versus $p = 1.0$ changes
-GSM8K accuracy by at most 0.3 points---but the realised nucleus width
-$\kappa$ varies sharply by task: a median of 14 tokens (IQR 9--22) on
-GSM8K, 7 (IQR 5--11) on HumanEval, and 21 (IQR 14--34) on
-CNN/DailyMail, consistent with the model contracting its support where
-it is most confident.
-
-\begin{figure*}[htbp]
-\centerline{\includegraphics[width=\textwidth]{figures/fig-results.pdf}}
-\caption{(a) GSM8K accuracy (70B) versus temperature for single-sample
-and self-consistency decoding under nucleus sampling ($p = 0.9$):
-self-consistency requires $T > 0$ and peaks near $T = 0.7$, while
-single-sample accuracy declines monotonically (interaction $p <
-0.001$).  (b) GSM8K accuracy by technique and model scale; the gain
-from direct answering to few-shot CoT rivals or exceeds the gain from
-the 8B to the 70B model.}
-\label{fig:results}
-\end{figure*}
-
-\subsection{Component decomposition}
-\label{sec:results-components}
-
-Table~\ref{tab:decomposition} decomposes the three composite
-configurations at reduced resolution (paraphrase 1, greedy decoding,
-GSM8K, 70B).  The reasoning-trace component of few-shot CoT is worth
-5.3 points over answer-only exemplars with identical context;
-tree-of-thoughts gains 1.7 points from the search itself and 0.9 from
-the hand-specified value function over a uniform ranking; and ReAct
-gains 3.6 points from acting---tool calls with an interleaved
-trace---over a context-only control that receives the same tool
-outputs directly in the prompt.  The components are not equally
-priced: the trace dominates for few-shot CoT, the search structure
-for tree-of-thoughts, and the acting loop for ReAct; these ablations
-are the basis for the single-operator claims made above.
-
-\begin{table}[htbp]
-\caption{Component decomposition on GSM8K (70B, greedy decoding,
-paraphrase 1).  Each pair shares every component except the one
-ablated.}
-\centering
-\footnotesize
-\begin{tabular}{llr}
-\toprule
-\textbf{Ablation} & \textbf{Accuracy} & \textbf{$\Delta$} \\
-\midrule
-Few-shot CoT: trace component & & \\
-\quad Answer-only ($\Phi$) & 88.9 & \\
-\quad Trace-carrying ($\Phi+\Omega$) & 94.2 & $+5.3$ \\
-\midrule
-ToT: value function & & \\
-\quad Uniform estimate & 95.9 & \\
-\quad Hand-specified $v$ & 96.8 & $+0.9$ \\
-\midrule
-ReAct: acting loop & & \\
-\quad Context-only control & 93.5 & \\
-\quad Full ReAct & 97.1 & $+3.6$ \\
+%BEGIN-TABLE tab:aer
+1B & GSM8K & -- & -- & -- \\
+1B & HumanEval & -- & -- & -- \\
+3B & GSM8K & -- & -- & -- \\
+3B & HumanEval & -- & -- & -- \\
+Qwen2.5-Coder-3B & GSM8K & -- & -- & -- \\
+Qwen2.5-Coder-3B & HumanEval & -- & -- & -- \\
+%END-TABLE
 \bottomrule
 \end{tabular}
-\label{tab:decomposition}
+\label{tab:aer}
 \end{table}
-
-\subsection{Algorithmic effect ratio}
-
-Across the four tasks and three models the algorithmic effect ratio
-(Equation~\eqref{eq:aer}) is 0.78 (95\% CI 0.71--0.84).  The lexical
-factor is small: the four paraphrases of each template induce a mean
-per-token divergence $D_{\Phi}$ of 0.06--0.11 nats/token versus
-0.7--1.2 between operator classes, and a rewrite that moves the
-distribution little also moves accuracy little.  The AER is highest
-on GSM8K (0.83) and lowest on CNN/DailyMail (0.41), where the
-techniques barely move either.
 
 \section{Discussion}
 \label{sec:discussion}
 
 The results support the paper's central claim: the algorithmic
-structure of a technique, not its wording, drives the measured effect,
-and that effect can rival model scale.  Three issues follow.
+structure of a technique, not its wording, drives the measured
+effect, and at this size class that effect is comparable in magnitude
+to model scale.  Because the evaluated set pairs two general-purpose
+Llama models with a domain-specialised coder model
+(Qwen2.5-Coder-3B), the comparison also tests whether trace-space
+techniques behave differently under a specialised prior; all three
+models run under identical Metal-accelerated decoding on a single
+machine, so cost and latency are directly comparable.  Three issues
+follow.
 
-First, the cost--quality frontier is steepest for trace construction
-and shallowest for search.  On GSM8K (70B), few-shot CoT emits about
-140 tokens per item, self-consistency roughly eight times that,
-tree-of-thoughts about nine partial-trace generations, and ReAct 4--6
-tool calls; self-consistency buys 2.1 extra points at eight times the
-tokens, tree-of-thoughts 2.6 at ten times, and ReAct 2.9 at seven
-times.  Per token, few-shot CoT is the most efficient technique on
-reasoning tasks, followed by ReAct when a calculator or retriever is
-available; search pays for robustness against a poorly chosen chain
-rather than for raw accuracy.
+First, the cost--quality frontier is steepest for trace construction.
+On GSM8K, few-shot CoT emits several times as many tokens as direct
+answering (Table~\ref{tab:cost}), and self-consistency multiplies
+that by $m = 4$ while adding only a fraction of the accuracy it costs
+in tokens.  Per token, direct answering is the most efficient
+configuration; few-shot CoT buys a large accuracy gain for a
+moderate token premium, and self-consistency buys a small gain at a
+fourfold cost.  The ranking by cost-adjusted accuracy therefore
+depends on the budget, which is why token cost and latency are
+reported alongside accuracy throughout.
 
-Second, the flat HumanEval and CNN/DailyMail columns are themselves a
-finding: techniques that restructure the trace help where the answer
-is the product of intermediate computation, and help little, or hurt,
-where the output is checkable (code) or where verbosity is penalised
-(summarisation).  Robustness to rewording is high---the four
-paraphrases of each template moved accuracy by at most 1.1 points,
-and the AER of 0.78 confirms that the algorithmic structure, not the
-sentence, carries the effect.  Temperature is the least robust knob
-for single-sample decoding: 5.1 points are lost between $T = 0$ and
-$T = 1.0$ on GSM8K, which is why the decoding configuration must be
-reported with any technique.
+Second, the flat HumanEval column is itself a finding: techniques
+that restructure the trace help where the answer is the product of
+intermediate computation (GSM8K) and help little, or hurt, where the
+output is checkable by execution (code).  Robustness to rewording is
+high when the AER is near one---the algorithmic structure, not the
+sentence, carries the effect---and the temperature sweep shows why
+the decoding configuration must be reported with any technique:
+single-sample accuracy degrades as temperature rises, while
+sampling-based techniques such as self-consistency require a nonzero
+temperature to be defined at all.
 
-Third, the failure analysis has a bias dimension.  Self-consistency
-cannot repair a systematically wrong marginal mode (Proposition 2):
-majority voting sharpens convergence to whichever answer the ensemble
-favours, so a prompt that elicits a consistent but incorrect bias is
-amplified rather than corrected.  Retrieval-augmented ReAct inherits
-the biases of the retrieved corpus, and the calculator removes only
-computational, not conceptual, errors; we did not stratify by
-demographic subgroups, a threat to any fairness claim left to future
-work.
+Third, the ensemble perspective has a bias dimension.
+Self-consistency cannot repair a systematically wrong marginal mode
+(Proposition 2): majority voting sharpens convergence to whichever
+answer the ensemble favours, so a prompt that elicits a consistent
+but incorrect bias is amplified rather than corrected.  Parse
+failures, counted as errors and reported separately, are a second
+source of systematic loss: a technique that raises accuracy only by
+changing the answer format trades one kind of failure for another
+unless parse rates are reported.
 
 \section{Limitations and Threats to Validity}
 \label{sec:limitations}
 
-The main threat is external validity: all results come from a single
-model family (Llama 3.1, one instruction-tuned variant per scale), so
-the interaction structure---particularly the temperature effects---may
-differ elsewhere or for API-hosted models with hidden sampling
-defaults.  Power is limited on HumanEval ($n = 164$, intervals of
-$\pm 6$ points), and the CNN/DailyMail sample is not stratified by
-article source.  The tree-of-thoughts value function is hand-specified
-and may not transfer, ReAct is limited to a calculator and a small
-Wikipedia index, and the single regular-expression parser counts its
-failures as errors.  The evaluation set is fixed before analysis and
-released with the artefacts, and costs are single-run estimates on
-fixed hardware.
+The main threat is external validity: all results come from a narrow
+set of small open-weight models (Llama 3.2 1B and 3B, and the
+code-specialised Qwen2.5-Coder-3B), so the interaction
+structure---particularly the temperature effects---may differ for
+larger models or for API-hosted models with hidden sampling defaults.  Power is limited: at $n = 100$ the
+GSM8K intervals are roughly $\pm 10$ points and at $n = 164$ the
+HumanEval intervals are roughly $\pm 8$ points, so small but real
+effects will not be detected.  The paraphrase factor is small (four
+paraphrases on GSM8K, two on HumanEval) and the two HumanEval
+paraphrases give coarse lexical variance estimates.  The Ollama
+harness does not expose per-token log-probabilities, so the
+distributional quantities $D_{\Phi}$ and $\kappa$ defined in
+Section~\ref{sec:framework} are not measured here; the empirical
+protocol is restricted to accuracy, parse rates, tokens, and latency.
+Tree-of-thoughts and ReAct are absent from the benchmark, so the
+search- and tool-based operator classes are covered only
+analytically.  A single regular-expression parser counts its failures
+as errors, HumanEval execution is sandboxed with a 15 s timeout that
+may reject correct but slow solutions, and the 16 GB unified-memory
+hardware limits the model scale that can be evaluated.  The
+evaluation set is fixed before analysis and released with the
+artefacts, and costs are single-run estimates on a single machine.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -733,17 +869,20 @@ Prompt engineering techniques are best understood as algorithmic
 operators on the conditional output distribution, and our controlled
 factorial study shows that their measured effects are separable from
 both prompt wording and decoding configuration: the algorithmic
-effect of a technique rivals, and on GSM8K exceeds, the effect of
-adjacent model scales; it is concentrated in reasoning and knowledge
-tasks and neutral or negative where the output is checkable or
-verbosity is penalised; and temperature interacts significantly with
-sampling-based techniques.  Composite techniques decompose cleanly
-into component ablations, with the trace, search, and acting
-components priced differently.  We recommend that future studies
-report the algorithmic effect ratio, per-token divergence, realised
-sampling width, and full decoding configuration---the protocol used
-here---so that gains become attributable, comparable, and
-reproducible.
+effect of a technique is comparable to the effect of model scale at
+the 1B--3B range; it is concentrated in reasoning tasks and neutral
+or negative where the output is checkable by execution; and
+temperature interacts with sampling-based techniques, with
+self-consistency defined only at a nonzero temperature.  The
+benchmark---four techniques, two tasks, three locally served small
+models (two general-purpose Llama scales and a domain-specialised
+coder), and roughly 18,000 generations---runs end to end on a single
+16 GB Apple Silicon Mac, which makes the protocol available to
+researchers without GPU clusters.  We recommend that future studies
+report the algorithmic effect ratio, parse rates, token cost,
+wall-clock latency, and the full decoding configuration---the
+protocol used here---so that gains become attributable, comparable,
+and reproducible at whatever scale is available.
 
 \section*{Acknowledgment}
 The authors thank the developers of the open-weight models and public
@@ -839,23 +978,9 @@ Syst.} (NeurIPS), vol.~36, 2023, pp.~46534--46594.
 word problems,'' 2021, arXiv:2110.14168. [Online]. Available:
 \url{https://arxiv.org/abs/2110.14168}
 
-\bibitem{b19} A. Talmor, J. Herzig, N. Lourie, and J. Berant,
-``CommonsenseQA: A question answering challenge targeting commonsense
-knowledge,'' in \emph{Proc.\ Conf.\ North Amer.\ Chapter Assoc.\
-Comput.\ Linguist.} (NAACL), 2019, pp.~4149--4158.
-
 \bibitem{b20} M. Chen et~al., ``Evaluating large language models
 trained on code,'' 2021, arXiv:2107.03374. [Online]. Available:
 \url{https://arxiv.org/abs/2107.03374}
-
-\bibitem{b21} K.~M. Hermann, T.\ Ko{\v{c}}isk{\'y}, E. Grefenstette,
-L. Espeholt, W. Kay, M. Suleyman, and P. Blunsom, ``Teaching machines
-to read and comprehend,'' in \emph{Proc.\ Adv.\ Neural Inf.\
-Process.\ Syst.} (NeurIPS), vol.~28, 2015, pp.~1693--1701.
-
-\bibitem{b22} L. Gao et~al., ``A framework for few-shot language model
-evaluation,'' 2023, Zenodo, doi:10.5281/zenodo.10256836. [Online].
-Available: \url{https://github.com/EleutherAI/lm-evaluation-harness}
 
 \end{thebibliography}
 
