@@ -703,7 +703,12 @@ def aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     for key, buckets in sc_buckets.items():
         model, task, par, temp, _ = key
         ck = (model, task, "self_consistency", par, temp)
-        winner = max(buckets.items(), key=lambda kv: (len(kv[1]), any(kv[1])))
+        # Unbiased tie-break: among buckets tied for the plurality count,
+        # pick the first-seen answer (insertion order).  The previous rule
+        # resolved ties by preferring a bucket whose samples were correct
+        # (max key (count, any(correct))), which silently inflated SC
+        # accuracy; correctness must not influence which answer wins.
+        winner = max(buckets.items(), key=lambda kv: len(kv[1]))
         winner_answer, winner_flags = winner
         sc_acc[ck][1] += 1
         if winner_answer != "__UNPARSED__" and any(winner_flags):

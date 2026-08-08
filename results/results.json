@@ -190,11 +190,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.11,
+      "accuracy": 0.04,
       "parse_rate": 0.995,
       "mean_tokens": 182.43,
       "mean_latency_s": 1.3777137536700206,
-      "vote_accuracy": 0.11,
+      "vote_accuracy": 0.04,
       "vote_parse_rate": 1.0
     },
     {
@@ -205,11 +205,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.15,
+      "accuracy": 0.12,
       "parse_rate": 0.9975,
       "mean_tokens": 289.6125,
       "mean_latency_s": 2.053463935630016,
-      "vote_accuracy": 0.15,
+      "vote_accuracy": 0.12,
       "vote_parse_rate": 1.0
     },
     {
@@ -220,11 +220,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.42,
+      "accuracy": 0.29,
       "parse_rate": 0.9975,
       "mean_tokens": 177.165,
       "mean_latency_s": 1.3032380682899884,
-      "vote_accuracy": 0.42,
+      "vote_accuracy": 0.29,
       "vote_parse_rate": 1.0
     },
     {
@@ -235,11 +235,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.21,
+      "accuracy": 0.11,
       "parse_rate": 0.9875,
       "mean_tokens": 234.62,
       "mean_latency_s": 1.686483449569996,
-      "vote_accuracy": 0.21,
+      "vote_accuracy": 0.11,
       "vote_parse_rate": 1.0
     },
     {
@@ -631,11 +631,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.88,
+      "accuracy": 0.79,
       "parse_rate": 1.0,
       "mean_tokens": 180.61,
       "mean_latency_s": 1.9630941046850239,
-      "vote_accuracy": 0.88,
+      "vote_accuracy": 0.79,
       "vote_parse_rate": 1.0
     },
     {
@@ -646,11 +646,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.82,
+      "accuracy": 0.78,
       "parse_rate": 1.0,
       "mean_tokens": 183.92,
       "mean_latency_s": 1.996633895125001,
-      "vote_accuracy": 0.82,
+      "vote_accuracy": 0.78,
       "vote_parse_rate": 1.0
     },
     {
@@ -661,11 +661,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.91,
+      "accuracy": 0.86,
       "parse_rate": 1.0,
       "mean_tokens": 190.0325,
       "mean_latency_s": 2.0887043965500336,
-      "vote_accuracy": 0.91,
+      "vote_accuracy": 0.86,
       "vote_parse_rate": 1.0
     },
     {
@@ -676,11 +676,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.87,
+      "accuracy": 0.84,
       "parse_rate": 1.0,
       "mean_tokens": 199.8125,
       "mean_latency_s": 2.313719796722412,
-      "vote_accuracy": 0.87,
+      "vote_accuracy": 0.84,
       "vote_parse_rate": 1.0
     },
     {
@@ -1072,11 +1072,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.81,
+      "accuracy": 0.74,
       "parse_rate": 1.0,
       "mean_tokens": 125.67,
       "mean_latency_s": 1.5362089062374873,
-      "vote_accuracy": 0.81,
+      "vote_accuracy": 0.74,
       "vote_parse_rate": 1.0
     },
     {
@@ -1087,11 +1087,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.82,
+      "accuracy": 0.75,
       "parse_rate": 0.9975,
       "mean_tokens": 119.785,
       "mean_latency_s": 1.866070992755017,
-      "vote_accuracy": 0.82,
+      "vote_accuracy": 0.75,
       "vote_parse_rate": 1.0
     },
     {
@@ -1102,11 +1102,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.89,
+      "accuracy": 0.81,
       "parse_rate": 1.0,
       "mean_tokens": 169.045,
       "mean_latency_s": 2.2050685765899813,
-      "vote_accuracy": 0.89,
+      "vote_accuracy": 0.81,
       "vote_parse_rate": 1.0
     },
     {
@@ -1117,11 +1117,11 @@
       "temperature": 0.7,
       "n": 400,
       "complete": true,
-      "accuracy": 0.85,
+      "accuracy": 0.74,
       "parse_rate": 1.0,
       "mean_tokens": 188.3675,
       "mean_latency_s": 2.1796080839099887,
-      "vote_accuracy": 0.85,
+      "vote_accuracy": 0.74,
       "vote_parse_rate": 1.0
     },
     {
@@ -1356,62 +1356,62 @@
       "vote_n_votes": 164
     },
     "qwen2.5-coder:3b__gsm8k__self_consistency__1__0.7": {
-      "vote_accuracy": 0.81,
+      "vote_accuracy": 0.74,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "qwen2.5-coder:3b__gsm8k__self_consistency__2__0.7": {
-      "vote_accuracy": 0.82,
+      "vote_accuracy": 0.75,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "qwen2.5-coder:3b__gsm8k__self_consistency__3__0.7": {
-      "vote_accuracy": 0.89,
+      "vote_accuracy": 0.81,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "qwen2.5-coder:3b__gsm8k__self_consistency__4__0.7": {
-      "vote_accuracy": 0.85,
+      "vote_accuracy": 0.74,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "llama3.2:1b__gsm8k__self_consistency__1__0.7": {
-      "vote_accuracy": 0.11,
+      "vote_accuracy": 0.04,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "llama3.2:1b__gsm8k__self_consistency__2__0.7": {
-      "vote_accuracy": 0.15,
+      "vote_accuracy": 0.12,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "llama3.2:1b__gsm8k__self_consistency__3__0.7": {
-      "vote_accuracy": 0.42,
+      "vote_accuracy": 0.29,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "llama3.2:1b__gsm8k__self_consistency__4__0.7": {
-      "vote_accuracy": 0.21,
+      "vote_accuracy": 0.11,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "llama3.2:3b__gsm8k__self_consistency__1__0.7": {
-      "vote_accuracy": 0.88,
+      "vote_accuracy": 0.79,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "llama3.2:3b__gsm8k__self_consistency__2__0.7": {
-      "vote_accuracy": 0.82,
+      "vote_accuracy": 0.78,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "llama3.2:3b__gsm8k__self_consistency__3__0.7": {
-      "vote_accuracy": 0.91,
+      "vote_accuracy": 0.86,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     },
     "llama3.2:3b__gsm8k__self_consistency__4__0.7": {
-      "vote_accuracy": 0.87,
+      "vote_accuracy": 0.84,
       "vote_parse_rate": 1.0,
       "vote_n_votes": 100
     }

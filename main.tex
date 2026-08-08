@@ -64,7 +64,7 @@ Effect on Large Language Model Output}
 \IEEEauthorblockA{\textit{Department of Electronics and Computer Engineering} \\
                  \textit{National College of Engineering, Tribhuvan University} \\
                  Kathmandu, Nepal \\
-                 <<EMAIL\_BRISHAV>>}
+                 brishavjoshi2081@gamil.com}
 }
 
 \maketitle
@@ -90,14 +90,17 @@ accuracy from 12 percent to 50 percent on the 1B model, a gain
 comparable to the 41-point improvement from scaling the model from
 1B to 3B.  Few-shot CoT and self-consistency raised accuracy
 substantially at the 3B and coder scales.  On GSM8K the algorithmic
-effect ratio is near one (0.82--1.00), so the technique gains largely
-survive rewording of the prompt; on HumanEval it is mixed
-(0.25--0.98) and degenerate where the technique effects vanish.
+effect ratio is near one (0.82--1.00) as a point estimate, although
+the bootstrap intervals around these estimates are wide; the
+technique gains largely survive rewording of the prompt.  On HumanEval
+it is mixed (0.25--0.98) and degenerate where the technique effects
+vanish.
 Temperature
 interacts with sampling-based techniques: self-consistency requires a
 nonzero temperature and is reported at its defined setting 0.7, while
-single-sample accuracy declines with temperature at the smaller
-scales and is roughly flat at the 3B scale.  We conclude with an
+single-sample accuracy moves little with temperature at all three
+scales, with the observed endpoint changes within the bootstrap
+interval.  We conclude with an
 evaluation protocol---parse rates, token cost, wall-clock latency,
 and the algorithmic effect ratio---that makes algorithmic and lexical
 contributions separable at small model scale.
@@ -154,8 +157,8 @@ The contributions of this paper are as follows.
         underlying $\arg\max$ or sampling operator.
   \item A controlled empirical study that isolates the algorithmic
         effect of prompting from the lexical effect by holding the
-        prompt template fixed and varying decoding parameters
-        $(T, k, p)$, and vice versa, at a scale that runs entirely on
+        prompt template fixed and varying the decoding temperature
+        $T$, and vice versa, at a scale that runs entirely on
         a single consumer machine.
   \item An evaluation protocol that we recommend for future prompt
         engineering research, designed to make algorithmic and
@@ -547,11 +550,9 @@ We draw a plain uniform-random sample of 100 items from the GSM8K test
 split under a single fixed seed (42) and evaluate all 164 HumanEval
 problems, which are few enough to be covered exhaustively; sampling is
 not stratified.  The evaluation set is identical across every cell of
-the design and is fixed before analysis: the seed is logged and the
-complete item-ID lists are released with the reproducibility artefacts
-at \url{https://github.com/sarwagya/prompt-algorithmic-effects}, so the
-items are publicly identifiable and any run can reconstruct the same
-set.  These sizes balance power against cost: at accuracies near 0.5,
+the design and is fixed before analysis: the seed and the complete
+item-ID lists are recorded with the evaluation logs, so any run can
+reconstruct the same set.  These sizes balance power against cost: at accuracies near 0.5,
 $n = 100$ yields 95\% confidence intervals of roughly $\pm 10$ points
 under the paired bootstrap of Section~\ref{sec:method-tools}, and
 $n = 164$ roughly $\pm 8$ points.
@@ -570,7 +571,12 @@ inflating generation cost and destabilising answer extraction.  We
 therefore adopted a specialised code/math instruction baseline
 instead: it keeps the third scale at the same parameter order while
 testing how a domain-specialised prior interacts with the operator
-classes of Section~\ref{sec:taxonomy}.
+classes of Section~\ref{sec:taxonomy}.  Because Qwen2.5-Coder-3B
+substitutes a domain-specialised model for the planned third scale
+rung, the direct scale-versus-technique comparison of
+Section~\ref{sec:results-main} rests on the two Llama models (1B and
+3B); the coder model contributes the specialisation axis rather than a
+third point on the scale ladder.
 The models are served locally as GGUF quantisations (Q4\_K\_M or
 Q8\_0 precision) through Ollama, which uses the llama.cpp inference
 engine with CUDA acceleration on the NVIDIA GPU.  Small open-weight models are required
@@ -594,7 +600,14 @@ a shared regular expression (preferring the value after the
 reported separately.
 HumanEval completions are executed against the provided unit tests in
 an isolated subprocess with a 15 s timeout, mirroring the pass@1
-protocol of the original benchmark.
+protocol of the original benchmark.  Self-consistency is aggregated
+differently per task: on GSM8K, a plurality vote over the normalised
+extracted numeric answers, with ties between equally frequent answers
+resolved in first-seen (insertion) order; on HumanEval, where
+generated programs cannot be reliably canonicalised for voting, a
+strict-majority rule in
+which an item counts as solved only when at least three of its four
+programs pass the unit tests.
 
 \textbf{Statistical analysis.}  Confidence intervals come from a
 paired bootstrap over items with 10,000 resamples; pairwise
@@ -611,11 +624,10 @@ cloud inference is used.  Wall-clock latency is recorded per item as a
 secondary cost metric alongside generated token counts.
 
 \textbf{Reproducibility.}  All prompt templates, model responses,
-evaluation logs, and analysis scripts are released at
-\url{https://github.com/sarwagya/prompt-algorithmic-effects}; the
-harness is resumable, every record carries its cell and item
-identifiers, and random seeds for every model call are recorded in the
-output logs.
+evaluation logs, and analysis scripts are available from the authors
+on request; the harness is resumable, every record carries its cell
+and item identifiers, and the evaluation seed is fixed in the harness
+configuration.
 
 \section{Results and Analysis}
 \label{sec:results}
@@ -625,7 +637,17 @@ at the reference decoding cell ($T = 0$, $p = 1.0$), except
 self-consistency, which is reported at its defined setting $T = 0.7$
 because greedy decoding is undefined for $m > 1$ (Section~III); the
 benchmark produced roughly 18,000 generations across three models and
-two tasks.  Two findings organise the results.  First, the
+two tasks.  Answer extraction with the regular expressions of
+Section~\ref{sec:method-tools} succeeded on 96--100\% of responses
+across the cells of the factorial (at least 99.5\% at the reference
+cell); parse failures are counted as errors.  Headline cells vary across the four GSM8K paraphrases---1B
+direct 12--42\%, 1B zero-shot CoT 45--50\%, 1B few-shot CoT 8--25\%,
+1B self-consistency 4--29\%, 3B direct 39--77\%, 3B zero-shot CoT
+75--82\%, 3B few-shot CoT 66--79\%, 3B self-consistency 78--86\%,
+coder direct 3--11\%, coder zero-shot CoT 72--81\%, coder few-shot
+CoT 68--75\%, and coder self-consistency 74--81\%---while HumanEval
+cells move by at most 4.2 points across its two paraphrases.  Two
+findings organise the results.  First, the
 algorithmic effect of a technique is comparable in size to the effect
 of model scale at this size class: on GSM8K, zero-shot CoT raises the
 1B model from 12\% to 50\%, a gain of the same order as the
@@ -641,8 +663,10 @@ decoding cell (greedy, $T = 0$, $p = 1.0$); self-consistency is
 reported at its defined setting $T = 0.7$, $m = 4$, at which greedy
 decoding is undefined for $m > 1$ (Section~III).  Values are
 percentages: GSM8K is exact-match accuracy on the 100-item sample,
-HumanEval is pass@1 on all 164 problems.  The model-scale comparison
-appears in Fig.~\ref{fig:results}b.}
+HumanEval is pass@1 on all 164 problems.  All values are paraphrase 1
+(of four GSM8K paraphrases, two for HumanEval); the per-paraphrase
+ranges are given in Section~\ref{sec:results}.  The model-scale
+comparison appears in Fig.~\ref{fig:results}b.}
 \centering
 \footnotesize
 \begin{tabular}{lcccccc}
@@ -655,7 +679,7 @@ appears in Fig.~\ref{fig:results}b.}
 Direct answering & 12.0 & 31.1 & 53.0 & 50.0 & 6.0 & 80.5 \\
 Zero-shot CoT & 50.0 & 22.0 & 75.0 & 48.8 & 79.0 & 79.9 \\
 Few-shot CoT & 8.0 & 31.1 & 70.0 & 50.0 & 71.0 & 82.9 \\
-Self-consistency & 11.0 & 20.1 & 88.0 & 41.5 & 81.0 & 75.0 \\
+Self-consistency & 4.0 & 20.1 & 79.0 & 41.5 & 74.0 & 75.0 \\
 %END-TABLE
 \bottomrule
 \multicolumn{7}{p{\dimexpr0.65\textwidth\relax}}{$^{\mathrm{a}}$95\% paired-bootstrap CIs over items: $\pm 10$ points (GSM8K, $n = 100$) and $\pm 8$ points (HumanEval, $n = 164$) at accuracies near 0.5.}
@@ -671,21 +695,37 @@ the strongest configuration at the smallest scale: it raises the 1B
 model from 12\% to 50\%, a gain of 38 points that nearly matches the
 41-point improvement from scaling the model from 1B to 3B under
 direct answering (12\% to 53\%).  Few-shot CoT helps the 3B model
-(53\% to 70\%) and the coder model (6\% to 71\%) but hurts the 1B
-model (12\% to 8\%); self-consistency adds a further gain over
-few-shot CoT at the 3B (70\% to 88\%) and coder (71\% to 81\%) scales
-at a fourfold token cost (Tables~\ref{tab:results} and~\ref{tab:cost}).
+(53\% to 70\%) and the coder model (6\% to 71\%); the apparent drop at
+the 1B model (12\% to 8\%) lies within the reported interval and is
+not distinguishable from noise at this sample size.
+Self-consistency adds a further gain over
+few-shot CoT at the 3B model (70\% to 79\%), whose 95\%
+paired-difference interval excludes zero, and a smaller gain at the
+coder scale (71\% to 74\%), whose interval includes zero, at a
+fourfold token cost (Tables~\ref{tab:results} and~\ref{tab:cost}).
 The coder model's direct-answering accuracy on GSM8K is unusually low
 (6\%) and rises steeply with trace construction, evidence that a
 specialised prior does not by itself make arithmetic tractable
 without intermediate reasoning.  On HumanEval the ordering is
 compressed: no technique improves pass@1 by more than three points,
 zero-shot CoT is neutral or negative, and self-consistency is the
-weakest configuration at every scale (Table~\ref{tab:results}).
+weakest configuration at every scale (Table~\ref{tab:results}); the
+shortfall relative to direct answering is significant at the 1B model
+($-11$ points; 95\% CI [$-16.5$, $-6.1$]) and the 3B model ($-8.5$;
+[$-14.0$, $-3.0$]) and directionally consistent at the coder model,
+so its strength comes from both the individual paired differences and
+their cross-model consistency.
 Differences from direct answering are evaluated against the bootstrap
 intervals in the table note, which are wide at $n = 100$; only
 differences exceeding the interval width are treated as evidence of
-an effect.
+an effect.  Paired-bootstrap tests of each technique against direct
+answering at the reference cell, with Holm--Bonferroni correction
+within each model--task block, confirm these headline gains:
+zero-shot CoT is significant at all three GSM8K scales (corrected
+$p < 0.001$) and at the 1B HumanEval scale (corrected $p = 0.027$),
+and few-shot CoT is significant at the 3B (corrected $p = 0.008$) and
+coder (corrected $p < 0.001$) GSM8K scales; no other technique effect
+survives correction.
 
 \subsection{Decoding interactions}
 \label{sec:results-decoding}
@@ -693,12 +733,20 @@ an effect.
 Table~\ref{tab:tempsweep} and Fig.~\ref{fig:results}a show the
 interaction between temperature and sampling strategy on GSM8K under
 nucleus sampling ($p = 0.9$).  Single-sample few-shot CoT accuracy
-declines with temperature at the 1B (8\% to 6\%) and coder (71\% to
-62\%) scales and is roughly flat, with a mild peak at $T = 0.3$, at
-the 3B scale (70\% to 66\%); self-consistency requires $T > 0$ and is
+changes little across temperature at all three scales: the endpoint
+movements (1B 8\% to 6\%, coder 71\% to 62\%, 3B 70\% to 66\%) and
+the apparent peak at $T = 0.3$ at the 3B scale all lie within the
+reported interval and are not distinguishable from noise;
+self-consistency requires $T > 0$ and is
 evaluated at its defined setting $T = 0.7$.  The ordering of the two
 curves---self-consistency lies above single-sample few-shot CoT at
-every scale---is the empirical content of H2.  Because the sweep is
+the 3B (79\% vs. 72\%) and coder (74\% vs. 69\%) scales but below it
+at the 1B scale (4\% vs. 6\%)---is consistent in direction only at
+the two larger scales; paired-bootstrap 95\% intervals on each
+difference include zero (3B [$-2$, $+16$], coder [$-4$, $+14$], 1B
+[$-7$, $+3$]), so H2 is consistent with the direction of the ordering
+at the 3B and coder scales but is not statistically confirmed at this
+sample size.  Because the sweep is
 run on all three models, the table also shows whether the interaction
 is stable across scale.
 
@@ -718,7 +766,7 @@ $T$ & FS-CoT & SC & FS-CoT & SC & FS-CoT & SC \\
 %BEGIN-TABLE tab:tempsweep
 0 & 8.0 & --- & 70.0 & --- & 71.0 & --- \\
 0.3 & 4.0 & --- & 74.0 & --- & 67.0 & --- \\
-0.7 & 6.0 & 11.0 & 72.0 & 88.0 & 69.0 & 81.0 \\
+0.7 & 6.0 & 4.0 & 72.0 & 79.0 & 69.0 & 74.0 \\
 1 & 6.0 & --- & 66.0 & --- & 62.0 & --- \\
 %END-TABLE
 \bottomrule
@@ -730,11 +778,12 @@ $T$ & FS-CoT & SC & FS-CoT & SC & FS-CoT & SC \\
 \centerline{\includegraphics[width=\textwidth]{figures/fig-results.pdf}}
 \caption{(a) GSM8K accuracy versus temperature for single-sample
 few-shot CoT and self-consistency decoding under nucleus sampling
-($p = 0.9$); square markers at $T = 0.7$ denote self-consistency,
-which requires $T > 0$ and is evaluated at its defined setting
-$T = 0.7$, while single-sample accuracy declines
-with temperature at the 1B and coder scales and is roughly flat at
-the 3B scale.  (b) GSM8K accuracy by technique and model scale at the
+($p = 0.9$); error bars are 95\% bootstrap confidence intervals over
+items, and square markers at $T = 0.7$ denote self-consistency, which
+requires $T > 0$ and is evaluated at its defined setting $T = 0.7$;
+single-sample accuracy moves little with temperature at all three
+scales, with the endpoint movements within the bootstrap interval.
+(b) GSM8K accuracy by technique and model scale at the
 reference decoding cell; the zero-shot-CoT gain at the 1B scale
 (12\% to 50\%) is of the same order as the gain from scaling the
 model from 1B to 3B under direct answering (12\% to 53\%).}
@@ -793,7 +842,17 @@ nearly flat, and low for the coder model (0.25), where lexical
 variance exceeds algorithmic variance; only the 1B model shows a high
 ratio (0.98) on the code task.  The lexical factor is evaluated with
 four paraphrases on GSM8K and two on HumanEval, so the HumanEval
-estimates are the noisier of the two.
+estimates are the noisier of the two.  Because each variance component
+is estimated from cell means over only 100 items (GSM8K) or 164 items
+(HumanEval) and as few as two paraphrase levels, an item-level
+bootstrap (5,000 resamples) yields wide 95\% intervals (1B GSM8K
+[0.90, 1.00]; 1B HumanEval [0.23, 1.00]; 3B GSM8K [0.40, 1.00];
+Qwen2.5-Coder-3B GSM8K [1.00, 1.00]; Qwen2.5-Coder-3B HumanEval
+[0.00, 1.00]); the point estimates should be read as indicative rather
+than precise.  The 3B HumanEval value is undefined rather than a real
+0.50: in 42\% of resamples both variance components collapse to zero,
+so the reported ratio is a reporting convention for an unidentifiable
+quantity, not a measurement.
 
 \begin{table}[htbp]
 \caption{Algorithmic effect ratio (Equation~\eqref{eq:aer}) and its
@@ -816,7 +875,12 @@ Qwen2.5-Coder-3B & HumanEval & 0.25 & 0.0000 & 0.0001 \\
 \bottomrule
 \multicolumn{5}{p{\dimexpr\columnwidth-12pt\relax}}{$^{\mathrm{a}}$For the 3B HumanEval row both variance
 components vanish (no technique effect is detectable), so the ratio is
-undefined and is reported as 0.50 by convention.}
+undefined and is reported as 0.50 by convention.
+$^{\mathrm{b}}$For the Qwen2.5-Coder-3B GSM8K row the lexical
+variance component is identically zero across all 5,000 resamples,
+pinning the ratio at its upper bound of 1.00---the same
+variance-clipping degeneracy as the 3B HumanEval row, in the opposite
+direction.}
 \end{tabular}
 \label{tab:aer}
 \end{table}
@@ -850,12 +914,16 @@ reported alongside accuracy throughout.
 Second, the flat HumanEval column is itself a finding: techniques
 that restructure the trace help where the answer is the product of
 intermediate computation (GSM8K) and help little, or hurt, where the
-output is checkable by execution (code).  Robustness to rewording is
-high when the AER is near one---the algorithmic structure, not the
+output is checkable by execution (code); the individual HumanEval
+deltas are within the reported interval, so the strength of this
+reading lies in the direction being consistent across all three
+models rather than in any single comparison.  Robustness to rewording
+is high when the AER is near one---the algorithmic structure, not the
 sentence, carries the effect---and the temperature sweep shows why
 the decoding configuration must be reported with any technique:
-single-sample accuracy declines with temperature at the smaller
-scales, while sampling-based techniques such as self-consistency
+single-sample accuracy moves little with temperature at the scales
+tested (all endpoint changes lie within the reported interval), while
+sampling-based techniques such as self-consistency
 require a nonzero temperature to be defined at all.
 
 Third, the ensemble perspective has a bias dimension.

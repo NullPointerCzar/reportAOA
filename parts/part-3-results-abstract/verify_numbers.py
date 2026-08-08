@@ -129,8 +129,17 @@ check("VI-A: zs-cot 1B 12% to 50%", "12\\% to 50\\%" in body)
 check("VI-A: fs-cot hurts 1B 12% to 8%", "12\\% to 8\\%" in body)
 check("VI-A: fs-cot 3B 53% to 70%", "53\\% to 70\\%" in body)
 check("VI-A: fs-cot coder 6% to 71%", "6\\% to 71\\%" in body)
-check("VI-A: SC 3B 70% to 88%", "70\\% to 88\\%" in body)
-check("VI-A: SC coder 71% to 81%", "71\\% to 81\\%" in body)
+check("VI-A: SC 3B 70% to 79%", "70\\% to 79\\%" in body)
+check("VI-A: SC coder 71% to 74%", "71\\% to 74\\%" in body)
+check("VI-A: SC 3B paired-difference interval excludes zero",
+      "paired-difference interval excludes zero" in body)
+check("VI: parse rate 96--100% reported", r"96--100\%" in body and "99.5" in body)
+check("VI: per-paraphrase ranges reported", "1B\ndirect 12--42" in body or "1B direct 12--42" in body)
+check("VI-A: Holm--Bonferroni p-values reported",
+      "Holm--Bonferroni correction" in body and
+      bool(re.search(r"corrected\s*\$p < 0\.001\$", body)))
+check("VI-B: H2 not statistically confirmed", "not statistically confirmed" in body)
+check("VI-A: SC HumanEval 1B difference CI", "[$-16.5$, $-6.1$]" in body)
 
 max_gain = 0.0
 for model in MODELS:
