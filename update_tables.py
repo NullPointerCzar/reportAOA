@@ -225,7 +225,7 @@ def main() -> None:
         print(f"{MODEL_LABELS[model]:>3} GSM8K  direct={fmt_acc(g)}  fs_cot={fmt_acc(f)}"
               f"  sc={fmt_acc(sc)}", end="")
         if g and f:
-            print(f"  (fs-direct gain={f - g:+.1f} pts)", end="")
+            print(f"  (fs-direct gain={(f - g) * 100:+.1f} pts)", end="")
         print()
     for model in MODELS:
         g = acc(idx, model, "humaneval", "direct")

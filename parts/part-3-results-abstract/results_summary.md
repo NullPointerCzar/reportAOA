@@ -1,64 +1,64 @@
 # Results Summary — Part 3
 
-> **⚠ STATUS: ILLUSTRATIVE — NOT MEASURED DATA.**
-> Every number in §VI–IX and the abstract is *illustrative*: anchored
-> to published values, internally consistent, and derived by this
-> agent.  The report must be **thoroughly checked** and the numbers
-> **replaced with measured values before any submission**.  This file
-> is the audit trail: it records the provenance of each headline
-> number so every figure in the paper is checkable.
+> ✅ **Status: MEASURED DATA.** All headline numbers below come from the
+> completed local benchmark run (17,988 generations; three models × two
+> tasks × the focused grid of `run_experiments.py`).  They are lifted
+> directly from `results/results.json` (see `update_tables.py` and
+> `parts/part-3-results-abstract/verify_numbers.py`).
 
-## Headline numbers (to lift into the abstract / results)
+## Headline numbers (measured)
 
 | Quantity | Value |
 | --- | --- |
-| Algorithmic effect ratio (AER) | 0.78 (95% CI 0.71–0.84); GSM8K 0.83, CNN/DM 0.41 |
-| Few-shot CoT vs. direct, GSM8K | 8B: 58.4→83.1 (+24.7); 70B: 74.6→94.2 (+19.6); 405B: 80.9→96.1 (+15.2) |
-| Technique gain ≈ scale gain | 8B→70B direct = +16.2 points (vs. +19.6 for 70B few-shot CoT) |
-| Self-consistency (m=8), GSM8K | +1.5–5.2 points across scales; 70B +2.1 at 8× token cost; **reported at optimum T=0.7** (greedy undefined for m>1 — see table note) |
-| Tree-of-thoughts, GSM8K 70B | +2.6 at ~10× token cost (search +1.7, value +0.9) |
-| ReAct, GSM8K 70B | +2.9 at ~7× token cost; CSQA 70B +2.2 |
-| Temperature × technique | Single-sample: 94.2→89.1 (T=0→1.0); SC peaks 96.3 at T≈0.7; interaction p<0.001 |
-| Component decomposition (GSM8K 70B, greedy) | trace +5.3 (Φ 88.9 → Φ+Ω 94.2); search +1.7 (94.2→95.9); value +0.9 (95.9→96.8); acting +3.6 (93.5→97.1) |
-| Realised nucleus width κ (p=0.9), median (IQR) | GSM8K 14 (9–22); HumanEval 7 (5–11); CNN/DM 21 (14–34) |
-| 95% CIs | GSM8K ±2.1, CSQA ±3.4 (n=500); HumanEval ±6.1 (n=164); ROUGE-L ±0.8 (n=500) |
-| Total generations | ≈ 4.0 million (derivation below) |
+| Total generations | 17,988 (GSM8K 11,100 + HumanEval 6,888) |
+| Zero-shot CoT vs. direct, GSM8K (paraphrase 1, greedy) | 1B: 12.0→50.0 (+38.0); 3B: 53.0→75.0 (+22.0); Coder-3B: 6.0→79.0 (+73.0) |
+| Few-shot CoT vs. direct, GSM8K | 1B: 12.0→8.0 (−4.0); 3B: 53.0→70.0 (+17.0); Coder-3B: 6.0→71.0 (+65.0) |
+| Technique gain ≈ scale gain | 1B zs-CoT +38.0 vs. 1B→3B direct +41.0 (12.0→53.0) — nearly identical |
+| Self-consistency (m=4, T=0.7), GSM8K | 1B: 11.0; 3B: 88.0 (+18.0 over fs-CoT 70.0); Coder-3B: 81.0 (+10.0 over fs-CoT 71.0); reported at defined T=0.7 |
+| HumanEval, all techniques | Compressed: max gain +2.4 (Coder-3B fs-CoT 82.9 vs 80.5 direct); zs-CoT neutral/negative; SC weakest at every scale |
+| Temperature × technique (GSM8K, fs-CoT single-sample) | 1B: 8.0→4.0→6.0→6.0; 3B: 70.0→74.0→72.0→66.0 (peak T=0.3); Coder: 71.0→67.0→69.0→62.0 (T=0, 0.3, 0.7, 1.0) |
+| AER (technique × paraphrase, reference cell) | 1B: GSM8K 0.99 / HE 0.98; 3B: 0.82 / 0.50 (degenerate: both σ² = 0); Coder-3B: 1.00 / 0.25 |
+| 95% CIs (paired bootstrap / Wald) | GSM8K ±10 pts (n=100, p≈0.5); HumanEval ±8 pts (n=164, p≈0.5) |
+| Token cost (mean tokens/item, GSM8K, par 1) | direct 33–79; zs-CoT 178–244; fs-CoT 126–173; SC ×4: 503–730 |
 
-## Provenance (anchor → source)
+## Headline claims in the paper (and the numbers that support them)
 
-| Numbers in paper | Anchor | Source |
-| --- | --- | --- |
-| GSM8K 8-shot CoT 84.5 / 95.1 / 96.8; HumanEval 0-shot 72.6 / 80.5 / 89.0 (8B/70B/405B) | Used directly as the HumanEval "direct" row (72.6/80.5/89.0) and as the ceiling for few-shot CoT | Meta, *The Llama 3 Herd of Models*, arXiv:2407.21783, Table 2. https://arxiv.org/abs/2407.21783 |
-| Few-shot CoT (n=4) 83.1 / 94.2 / 96.1 | Derived: 8-shot anchor minus small exemplar-count penalty (−1.4/−0.9/−0.7) | derived |
-| Direct answering 58.4 / 74.6 / 80.9 (GSM8K) | Derived from published no-CoT/direct estimates for Llama 3.1 (8B ≈ 55–60, 70B ≈ 70–77, 405B ≈ 79–83 in third-party evals) | derived (range-checked) |
-| Zero-shot CoT 76.2 / 88.9 / 92.4 | Derived: direct + 12–18 pts, matching zero-shot-CoT gains | Kojima et al., NeurIPS 2022, arXiv:2205.11916 |
-| Self-consistency deltas 1.5–5.2 | Derived: published SC gains 3.9–17.9 pts (GSM8K +17.9 at PaLM-540B), smaller for stronger models | Wang et al., ICLR 2023, arXiv:2203.11171 |
-| ToT deltas (search +1.7, value +0.9) | Derived: search structure is the main driver (Game of 24: CoT 4% → ToT 74%) | Yao et al., NeurIPS 2023, arXiv:2305.10601 |
-| ReAct deltas (+2.9 GSM8K, +2.2 CSQA) | Derived: acting + retrieval reduces hallucination; calculator removes arithmetic error | Yao et al., ICLR 2023, arXiv:2210.03629 |
-| Temperature curve (SC peaks ~0.7; single-sample declines) | Qualitative pattern as reported; optimal T ≈ 0.3–0.7 for multi-sample inference | Du, Yang, Welleck, ICML 2025, arXiv:2502.05234 |
-| CSQA 70B 72.4–83.5 | Derived within published instruction-tuned CSQA range: CoT GPT-3 75.2%, PaLM-540B 80.5%; zero-shot CoT InstructGPT 78.6% | Wei et al., NeurIPS 2022, arXiv:2201.11903; Kojima et al., 2022 |
-| CNN/DM ROUGE-L 28.0–28.9 | Derived within published instruction-tuned ROUGE-L range (Llama-2-chat ≈ 27–29, GPT-3.5 ≈ 30); technique deltas ≤ 0.5 | derived (range-checked) |
-| AER, D_Φ (0.06–1.2 nats/token), κ | Framework-defined quantities (Eq. AER, D_Φ, κ in §IV); illustrative values with no published anchor | derived |
-| CIs (±2.1 … ±6.1) | Wald formula ±1.96·√(p(1−p)/n) at the reported accuracies (e.g., GSM8K 94.2%, n=500 → ±2.1; HumanEval 80.5%, n=164 → ±6.1) | mathematically derived |
-| p-values, AER CI, REML interaction | Illustrative (paired bootstrap / Holm–Bonferroni / REML as specified in §V-D) | derived |
-
-## Derivation of the ≈4.0M generation estimate
-
-Per (model, task): 6 techniques × 4 paraphrases × 8 decoding cells =
-192 cells; mean 1 generation/item, except self-consistency ×8,
-tree-of-thoughts ≈9 expansions, ReAct ≈5 tool/trace steps:
-≈ 192 + 32·7 + 32·8 + 32·4 = 800 item-equivalents.  Items per task:
-500 (GSM8K, CSQA, CNN/DM), 164 (HumanEval) → 800 × 1,664 ≈ 1.33M per
-model × 3 models ≈ **4.0M generations**.
+- **Algorithmic effect ≈ model scale.** On GSM8K, zero-shot CoT lifts
+  the 1B model 12.0→50.0, while scaling 1B→3B under direct answering
+  lifts 12.0→53.0 (+38 vs +41 points).  Few-shot CoT and
+  self-consistency add further substantial gains at the 3B and coder
+  scales.
+- **AER near one on GSM8K** (0.82–1.00): the technique gains survive
+  rewording of the prompt.  On HumanEval the ratio is mixed
+  (0.25–0.98) and degenerate for the 3B model where technique effects
+  vanish.
+- **Temperature interacts with sampling.**  Single-sample few-shot
+  CoT declines with temperature at the 1B and coder scales and is
+  roughly flat (mild peak at T=0.3) at the 3B scale; self-consistency
+  requires T > 0 and is evaluated at its defined setting T = 0.7.
+- **Task dependence.**  Trace- and ensemble-based techniques help on
+  GSM8K and are roughly neutral or negative on HumanEval, where
+  self-consistency is the weakest configuration at every scale.
 
 ## Replace before submission (checklist)
 
-- [ ] Replace **all** numbers in Table I (`tab:results`), Table II
-  (`tab:decomposition`), Fig. 1 (`fig:results`), §VI–IX, and the
-  abstract with measured values from the actual run.
-- [ ] Recompute AER, D_Φ, κ, CIs, p-values, token costs, generation
-  count from the real logs.
-- [ ] Confirm the claim "8B→70B direct +16.2 ≈ 70B few-shot CoT
-  +19.6" still holds with real numbers (it is the paper's headline).
-- [ ] Either delete this file before submission or keep it internal
-  only — it must not ship with the paper.
+- [x] Tables `tab:results`, `tab:tempsweep`, `tab:cost`, `tab:aer`
+      filled from measured data (`update_tables.py`, re-run via
+      `python3 update_tables.py`).
+- [x] Fig. `fig:results` regenerated from measured data
+      (`parts/part-3-results-abstract/make_fig_results.py`).
+- [x] Abstract and §VI–IX prose checked against the measured numbers
+      (script: `parts/part-3-results-abstract/verify_numbers.py`).
+- [ ] Replace `<<EMAIL_BRISHAV>>` in the author block (open question
+      for the user).
+- [ ] Keep this file internal only — it must not ship with the paper.
+
+## Provenance
+
+Every cell in `tab:results`, `tab:tempsweep`, and `tab:cost` is
+computed from `results/results.json` by `update_tables.py`; the AER
+and its variance components are computed by `run_experiments.py
+--aggregate` from the per-item records in `results/records.jsonl`.
+The verification script `verify_numbers.py` cross-checks every table
+cell and headline claim against `results/results.json` and the record
+count.

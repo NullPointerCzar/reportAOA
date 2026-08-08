@@ -1,112 +1,185 @@
-"""Final numerical verification: cross-check every number in main.tex
-against itself (arithmetic), against results_summary.md, and against the
-figure generator data.  Prints PASS/FAIL for each check.
+"""Final numerical verification: cross-check every table cell and
+headline claim in main.tex against the MEASURED results/results.json
+and the per-item record count.  Prints PASS/FAIL for each check.
+
+Run from the project root:  python3 parts/part-3-results-abstract/verify_numbers.py
 """
-import re, math
+import json, re, math, os, sys
 
-tex = open('main.tex').read()
-body = tex.split('\\begin{thebibliography}')[0]
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+os.chdir(ROOT)
+tex = open("main.tex").read()
+results = json.load(open("results/results.json"))
+records = [json.loads(l) for l in open("results/records.jsonl")]
 
-results = []
-def check(name, cond, detail=''):
-    results.append((name, bool(cond), detail))
-    tag = 'PASS' if cond else 'FAIL'
-    print(f'[{tag}] {name}' + (f'  -- {detail}' if detail else ''))
+fails = []
+def check(name, cond, detail=""):
+    tag = "PASS" if cond else "FAIL"
+    print(f"[{tag}] {name}" + (f"  -- {detail}" if detail else ""))
+    if not cond:
+        fails.append(name)
+
+# --- expected values from results.json (mirror update_tables.py) ---
+MODELS = ["llama3.2:1b", "llama3.2:3b", "qwen2.5-coder:3b"]
+TASKS = ["gsm8k", "humaneval"]
+SC_T, REF_T = 0.7, 0.0
+idx = {}
+for r in results["table"]:
+    idx[(r["model"], r["task"], r["technique"], int(r["paraphrase"]),
+         float(r["temperature"]))] = r
+
+def acc(model, task, tech, par=1, temp=None):
+    t = SC_T if tech == "self_consistency" else (REF_T if temp is None else temp)
+    row = idx.get((model, task, tech, par, t))
+    if row is None or not row.get("complete", False):
+        return None
+    if tech == "self_consistency":
+        va = row.get("vote_accuracy")
+        return va if va is not None else row.get("accuracy")
+    return row.get("accuracy")
+
+def table_rows(label):
+    m = re.search(r"BEGIN-TABLE " + label + r"(.*?)END-TABLE", tex, re.S)
+    out = []
+    for ln in m.group(1).split("\\\\"):
+        ln = ln.strip()
+        if not ln or ln.startswith("%"):
+            continue
+        out.append(ln)
+    return out
+
+LABEL_TO_TECH = {"Direct answering": "direct", "Zero-shot CoT": "zs_cot",
+                 "Few-shot CoT": "fs_cot", "Self-consistency": "self_consistency"}
 
 # ---------------- Table tab:results ----------------
-# Parse the tabular in tab:results
-m = re.search(r'\\begin\{tabular\}\{lcccc\}(.*?)\\end\{tabular\}', tex, re.S)
-rows = {}
-for line in m.group(1).split('\\\\'):
-    cells = [re.sub(r'\\(?:top|mid|bottom)rule', '', c).strip() for c in line.split('&')]
-    if len(cells) == 5 and cells[0] and cells[1] and re.match(r'^\d', cells[1]):
-        rows[cells[0].strip()] = [float(x) for x in cells[1:5]]
-print('Table tab:results rows parsed:', {k: v for k, v in rows.items()})
-T = rows
-check('Table has all 6 techniques', set(T) == {'Direct answering','Zero-shot CoT','Few-shot CoT','Self-consistency','Tree-of-thoughts','ReAct'})
+tbl = {}
+for ln in table_rows("tab:results"):
+    cells = [c.strip() for c in ln.split("&")]
+    tbl[cells[0]] = cells[1:]
+check("tab:results has 4 technique rows", len(tbl) == 4)
+for tech, label in LABEL_TO_TECH.items():
+    col = 0
+    for model in MODELS:
+        for task in TASKS:
+            v = acc(model, task, label)
+            exp = "--" if v is None else f"{v*100:.1f}"
+            check(f"tab:results {tech}/{model}/{task}", tbl[tech][col] == exp,
+                  f"got {tbl[tech][col]}, expected {exp}")
+            col += 1
 
-# ---------------- Main comparison arithmetic ----------------
-check('GSM8K 8B direct->fSCoT +24.7', abs((83.1-58.4)-24.7) < 0.01)
-check('GSM8K 70B direct->fSCoT +19.6', abs((94.2-74.6)-19.6) < 0.01)
-check('GSM8K 405B direct->fSCoT +15.2', abs((96.1-80.9)-15.2) < 0.01)
-check('Scale gain 8B->70B direct +16.2', abs((74.6-58.4)-16.2) < 0.01)
-check('CSQA fSCoT +8.9 over direct', abs((T['Few-shot CoT'][1]-T['Direct answering'][1])-8.9) < 0.01)
-check('CSQA ReAct +2.2 over fSCoT', abs((T['ReAct'][1]-T['Few-shot CoT'][1])-2.2) < 0.01)
-check('HumanEval max gain 2.9 (SC)', abs(max(T['Self-consistency'][2]-T['Direct answering'][2], T['Few-shot CoT'][2]-T['Direct answering'][2], T['Tree-of-thoughts'][2]-T['Direct answering'][2], T['ReAct'][2]-T['Direct answering'][2]))-2.9 < 0.01)
-check('HumanEval zero-shot CoT harmful', T['Zero-shot CoT'][2] < T['Direct answering'][2])
-check('CNN-DM diffs within 0.5', max(abs(T[k][3]-T['Direct answering'][3]) for k in T) <= 0.5)
-check('CNN-DM trace-based negative', T['Zero-shot CoT'][3] < T['Direct answering'][3] and T['Tree-of-thoughts'][3] < T['Direct answering'][3])
+# ---------------- Table tab:tempsweep ----------------
+for ln in table_rows("tab:tempsweep"):
+    cells = [c.strip() for c in ln.split("&")]
+    t = float(cells[0])
+    col = 1
+    for model in MODELS:
+        v_fs = acc(model, "gsm8k", "fs_cot", par=1, temp=t)
+        exp_fs = "--" if v_fs is None else f"{v_fs*100:.1f}"
+        check(f"tab:tempsweep {model} T={t} FS-CoT", cells[col] == exp_fs,
+              f"got {cells[col]}, expected {exp_fs}")
+        col += 1
+        if t == SC_T:
+            v_sc = acc(model, "gsm8k", "self_consistency", par=1)
+            exp_sc = "--" if v_sc is None else f"{v_sc*100:.1f}"
+            check(f"tab:tempsweep {model} T={t} SC", cells[col] == exp_sc,
+                  f"got {cells[col]}, expected {exp_sc}")
+        else:
+            check(f"tab:tempsweep {model} T={t} SC='---'", cells[col] == "---")
+        col += 1
 
-# ---------------- Decoding interactions ----------------
-check('T=0 -> T=1.0 single-sample loss 5.1', abs((94.2-89.1)-5.1) < 0.01)
-check('SC peak 96.3 == table SC GSM8K', abs(T['Self-consistency'][0]-96.3) < 0.01)
+# ---------------- Table tab:cost ----------------
+for ln in table_rows("tab:cost"):
+    cells = [c.strip() for c in ln.split("&")]
+    tech = LABEL_TO_TECH[cells[0]]
+    col = 1
+    for model in MODELS:
+        t = SC_T if tech == "self_consistency" else REF_T
+        row = idx.get((model, "gsm8k", tech, 1, t))
+        if row is None or not row.get("complete", False):
+            check(f"tab:cost {cells[0]}/{model} data present", False)
+            col += 2
+            continue
+        mult = 4 if tech == "self_consistency" else 1
+        tok = f"{row['mean_tokens']*mult:.0f}"
+        lat = f"{row['mean_latency_s']*mult:.1f}"
+        check(f"tab:cost {cells[0]}/{model} tokens", cells[col] == tok,
+              f"got {cells[col]}, expected {tok}")
+        check(f"tab:cost {cells[0]}/{model} latency", cells[col+1] == lat,
+              f"got {cells[col+1]}, expected {lat}")
+        col += 2
 
-# ---------------- Component decomposition ----------------
-check('Decomp trace +5.3', abs((94.2-88.9)-5.3) < 0.01)
-check('Decomp search +1.7 (94.2->95.9)', abs((95.9-94.2)-1.7) < 0.01)
-check('Decomp value +0.9', abs((96.8-95.9)-0.9) < 0.01)
-check('Decomp acting +3.6', abs((97.1-93.5)-3.6) < 0.01)
+# ---------------- Table tab:aer ----------------
+ML = {"1B": "llama3.2:1b", "3B": "llama3.2:3b", "Qwen2.5-Coder-3B": "qwen2.5-coder:3b"}
+TL = {"GSM8K": "gsm8k", "HumanEval": "humaneval"}
+for ln in table_rows("tab:aer"):
+    cells = [c.strip() for c in ln.split("&")]
+    e = results["aer"].get(ML[cells[0]], {}).get(TL[cells[1]])
+    check(f"tab:aer {cells[0]}/{cells[1]} AER", cells[2] == f"{e['aer']:.2f}",
+          f"got {cells[2]}, expected {e['aer']:.2f}")
+    check(f"tab:aer {cells[0]}/{cells[1]} sigma_alg", cells[3] == f"{e['sigma_alg']:.4f}")
+    check(f"tab:aer {cells[0]}/{cells[1]} sigma_lex", cells[4] == f"{e['sigma_lex']:.4f}")
 
-# ---------------- Discussion cost deltas (vs few-shot CoT 94.2) ----------------
-check('Discussion SC +2.1 vs fSCoT', abs((96.3-94.2)-2.1) < 0.01)
-check('Discussion ToT +2.6 vs fSCoT', abs((96.8-94.2)-2.6) < 0.01)
-check('Discussion ReAct +2.9 vs fSCoT', abs((97.1-94.2)-2.9) < 0.01)
+# ---------------- Prose claims ----------------
+body = tex.split(r"\begin{thebibliography}")[0]
+check("abstract: 12 percent to 50 percent",
+      "12 percent to 50 percent" in tex.split(r"\end{abstract}")[0])
+check("abstract: 41-point", "41-point" in tex.split(r"\end{abstract}")[0])
+check("abstract: AER 0.82--1.00", "0.82--1.00" in tex.split(r"\end{abstract}")[0])
+check("VI-A: zs-cot 1B 12% to 50%", "12\\% to 50\\%" in body)
+check("VI-A: fs-cot hurts 1B 12% to 8%", "12\\% to 8\\%" in body)
+check("VI-A: fs-cot 3B 53% to 70%", "53\\% to 70\\%" in body)
+check("VI-A: fs-cot coder 6% to 71%", "6\\% to 71\\%" in body)
+check("VI-A: SC 3B 70% to 88%", "70\\% to 88\\%" in body)
+check("VI-A: SC coder 71% to 81%", "71\\% to 81\\%" in body)
 
-# ---------------- CIs (Wald) ----------------
+max_gain = 0.0
+for model in MODELS:
+    d = acc(model, "humaneval", "direct")
+    for tech in ["zs_cot", "fs_cot", "self_consistency"]:
+        v = acc(model, "humaneval", tech)
+        if v is not None and d is not None:
+            max_gain = max(max_gain, (v - d) * 100)
+check("VI-A: max HumanEval technique gain <= 3 pts", max_gain <= 3.0,
+      f"max gain {max_gain:.1f}")
+
+weakest_ok = all(
+    acc(m, "humaneval", "self_consistency") < min(
+        acc(m, "humaneval", t) for t in ["direct", "zs_cot", "fs_cot"])
+    for m in MODELS)
+check("VI-A: SC weakest on HumanEval at every scale", weakest_ok)
+
+check("~18,000 generations measured", len(records) == 17988, f"records={len(records)}")
+check("18,000 in text", "18,000" in body)
+
 def wald(p, n):
-    return 1.96 * math.sqrt(p*(1-p)/n) * 100
-check('CI GSM8K ±2.1 (94.2%, n=500)', abs(wald(0.942,500)-2.1) < 0.15, f'computed {wald(0.942,500):.2f}')
-check('CI CSQA ±3.4 (81.3%, n=500)', abs(wald(0.813,500)-3.4) < 0.2, f'computed {wald(0.813,500):.2f}')
-check('CI HumanEval ±6.1 (80.5%, n=164)', abs(wald(0.805,164)-6.1) < 0.5, f'computed {wald(0.805,164):.2f}')
-check('CI HumanEval ±8 in setup (n=164, p=0.5)', abs(wald(0.5,164)-8) < 1.0, f'computed {wald(0.5,164):.2f}')
+    return 1.96 * math.sqrt(p * (1 - p) / n) * 100
+check("CI GSM8K ~10 (p=0.5,n=100)", abs(wald(0.5, 100) - 9.8) < 0.3,
+      f"{wald(0.5,100):.1f}")
+check("CI HumanEval ~8 (p=0.5,n=164)", abs(wald(0.5, 164) - 7.65) < 0.3,
+      f"{wald(0.5,164):.1f}")
 
-# ---------------- AER ----------------
-check('AER 0.78 in abstract', '0.78' in tex.split('\\begin{IEEEkeywords}')[0])
-check('AER 0.78 in results', '0.78' in body)
-check('AER CI 0.71-0.84', '0.71--0.84' in body)
-check('AER GSM8K 0.83', '0.83' in body)
-check('AER CNN/DM 0.41', '0.41' in body)
+check("VI-AER: GSM8K ratio near one (0.82--1.00)", "0.82--1.00" in body)
+check("VI-AER: 3B HumanEval degenerate", "degenerate" in body)
+check("tab:aer footnote present", r"reported as 0.50 by convention" in tex)
 
-# ---------------- Abstract vs body consistency ----------------
-ab = re.search(r'\\begin\{abstract\}(.*?)\\end\{abstract\}', tex, re.S).group(1)
-for num in ['58.4', '83.1', '74.6', '94.2', '0.78']:
-    check(f'Abstract number {num} also in body', num in body, f'abstract contains {num}: {num in ab}')
+# bibliography integrity
+bib = re.search(r"\\begin\{thebibliography\}\{00\}(.*?)\\end\{thebibliography\}", tex, re.S).group(1)
+bibkeys = set(re.findall(r"\\bibitem\{([^}]*)\}", bib))
+cited = set()
+for c in re.findall(r"\\cite\{([^}]*)\}", tex):
+    for k in c.split(","):
+        cited.add(k.strip())
+check("every citation resolves to a bibitem", cited <= bibkeys,
+      f"missing: {sorted(cited - bibkeys)}")
+check("no uncited bibitems", bibkeys <= cited, f"uncited: {sorted(bibkeys - cited)}")
 
-# ---------------- Herd anchors consistency (results_summary provenance) ----------------
-check('Anchor fSCoT 8B 83.1 = 84.5-1.4', abs((84.5-1.4)-83.1) < 0.01)
-check('Anchor fSCoT 70B 94.2 = 95.1-0.9', abs((95.1-0.9)-94.2) < 0.01)
-check('Anchor fSCoT 405B 96.1 = 96.8-0.7', abs((96.8-0.7)-96.1) < 0.01)
-check('HumanEval direct = Herd 0-shot (72.6/80.5/89.0)', '80.5' in body)
-
-# ---------------- Kappa ----------------
-check('kappa GSM8K 14 (9-22)', '14 tokens (IQR 9--22)' in body)
-check('kappa HumanEval 7 (5-11)', '7 (IQR 5--11)' in body)
-check('kappa CNN/DM 21 (14-34)', '21 (IQR 14--34)' in body)
-
-# ---------------- Generation count ----------------
-# 192 cells + SC(32*7) + ToT(32*8) + ReAct(32*4) = 192+224+256+128=800 item-equivalents
-cells = 6*4*8
-sc_extra = (8-1)*4*8      # m=8 -> 7 extra
-tot_extra = (9-1)*4*8     # ~9 expansions
-react_extra = (5-1)*4*8   # ~5 steps
-per_task = cells + sc_extra + tot_extra + react_extra
-items_per_model = 500+500+500+164
-total = per_task * items_per_model * 3
-check('Generation count ~4.0M', abs(total/1e6 - 4.0) < 0.3, f'computed {total/1e6:.2f}M')
-
-# ---------------- results_summary cross-check ----------------
-try:
-    rs = open('parts/part-3-results-abstract/results_summary.md').read()
-    key_numbers = ['0.78', '58.4', '83.1', '74.6', '94.2', '80.9', '96.1',
-                   '24.7', '19.6', '15.2', '16.2', '5.3', '1.7', '0.9', '3.6',
-                   '96.3', '89.1', '0.71', '0.84', '0.83', '0.41', '2.1', '3.4', '6.1']
-    missing = [n for n in key_numbers if n not in rs]
-    check('results_summary.md covers all headline numbers', not missing, f'missing: {missing}')
-except FileNotFoundError:
-    check('results_summary.md exists', False, 'file not found')
+# abstract word count (150-250)
+ab = re.search(r"\\begin\{abstract\}(.*?)\\end\{abstract\}", tex, re.S).group(1)
+nw = len(ab.split())
+check("abstract word count 150-250", 150 <= nw <= 250, f"{nw} words")
 
 print()
-fails = [r for r in results if not r[1]]
-print(f'TOTAL: {len(results)} checks, {len(fails)} FAILED')
-for name, _, detail in fails:
-    print(f'  FAILED: {name} {detail}')
+if fails:
+    print(f"TOTAL: {len(fails)} FAILED: {fails}")
+    sys.exit(1)
+print("TOTAL: all checks PASS")

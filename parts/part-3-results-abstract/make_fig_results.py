@@ -21,6 +21,7 @@ import sys
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -75,8 +76,10 @@ def main() -> None:
     fig = plt.figure(figsize=(7.1, 2.35))
 
     # ---------------- panel (a): temperature sweep, GSM8K ----------------
-    ax = fig.add_axes([0.06, 0.15, 0.40, 0.77])
+    # Bottom margin is widened to leave room for the horizontal legend below.
+    ax = fig.add_axes([0.06, 0.24, 0.40, 0.70])
     plotted_a = False
+    plotted_sc = False
     for model in MODELS:
         fs = [acc(model, "gsm8k", "fs_cot", 1, t) for t in TEMPS]
         sc_t = acc(model, "gsm8k", "self_consistency", 1, SC_T)
@@ -88,13 +91,27 @@ def main() -> None:
             ax.plot(xs, ys, "o-", color=MODEL_COLORS[model], lw=1.1, ms=3,
                     label=f"{MODEL_LABELS[model]}, FS-CoT")
         if sc_t is not None:
+            plotted_sc = True
             ax.plot([SC_T], [sc_t * 100], "s", color=MODEL_COLORS[model], ms=5,
                     mec="k", mew=0.4)
     ax.set_xlabel("Temperature $T$")
     ax.set_ylabel("Accuracy (%)")
     ax.set_xticks(TEMPS)
     ax.set_ylim(0, 100)
-    ax.legend(frameon=False, loc="lower left", fontsize=5.5)
+    # Explicit legend entry for the standalone self-consistency squares,
+    # shown only when at least one SC point was actually plotted.
+    handles, _ = ax.get_legend_handles_labels()
+    if plotted_sc:
+        sc_proxy = mlines.Line2D([], [], marker="s", color="none",
+                                 markerfacecolor="0.45", markeredgecolor="k",
+                                 markeredgewidth=0.4, markersize=5,
+                                 label="Self-consistency ($T = 0.7$)")
+        handles = handles + [sc_proxy]
+    # Horizontal legend below the panel: never overlaps the data lines.
+    ax.legend(handles=handles, frameon=False, loc="upper center",
+              bbox_to_anchor=(0.5, -0.24), ncol=3, fontsize=5.5,
+              handlelength=1.4, handletextpad=0.4, columnspacing=1.2,
+              borderaxespad=0.0)
     ax.set_title("(a) GSM8K, temperature sweep (nucleus $p=0.9$)")
     if not plotted_a:
         print("[fig] no temperature-sweep data yet; panel (a) empty")
@@ -121,8 +138,11 @@ def main() -> None:
     if not plotted_b:
         print("[fig] no reference-cell data yet; panel (b) empty")
 
-    fig.savefig(os.path.join(OUT_DIR, "fig-results.pdf"))
-    fig.savefig(os.path.join(OUT_DIR, "fig-results.png"), dpi=300)
+    # bbox_inches="tight" (tight_layout is a no-op for manual add_axes).
+    fig.savefig(os.path.join(OUT_DIR, "fig-results.pdf"),
+                bbox_inches="tight")
+    fig.savefig(os.path.join(OUT_DIR, "fig-results.png"), dpi=300,
+                bbox_inches="tight")
     print(f"wrote figures/fig-results.pdf and figures/fig-results.png")
 
 

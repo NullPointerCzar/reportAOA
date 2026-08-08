@@ -1,7 +1,9 @@
 # Analysis of Prompt Engineering Techniques and Their Algorithmic Effect on LLM Output
 
 IEEE-style research paper (`main.tex`) with a **real, runnable local benchmark**
-pipeline for Apple Silicon Macs (16 GB unified memory, Metal via Ollama).
+pipeline for a consumer gaming laptop with an 8 GB VRAM NVIDIA GPU
+(CUDA via Ollama; the reported runs used an Acer Predator with an
+RTX 4060, 16 GB RAM, on Linux).
 
 ## Benchmark
 
@@ -44,7 +46,7 @@ count, and wall-clock latency; aggregated results go to
 # download/cache benchmark data (optional - --run does this automatically)
 python3 run_experiments.py --fetch-data
 
-# run the full focused grid (all 3 models x 2 tasks, ~25-30 h on a 16 GB Mac)
+# run the full focused grid (all 3 models x 2 tasks, ~25-30 h on an 8 GB VRAM laptop)
 python3 run_experiments.py --run
 
 # or prioritise / subset:
