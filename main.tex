@@ -76,31 +76,32 @@ Effect on Large Language Model Output}
 % ---------------------------------------------------------------------
 \begin{abstract}
 Prompt engineering techniques raise benchmark scores for large
-language models (LLMs), yet most reports do not separate the part of
-the gain that comes from the technique's algorithmic structure from
-the part that comes from the wording of the prompt or the decoding
-configuration used to produce the output.  We treat four prompting
+language models (LLMs).  Most reports, though, do not separate the
+part of the gain that comes from a technique's algorithmic structure
+from the part that comes from how the prompt happens to be worded or
+how the output was decoded.  We treat four prompting
 techniques---direct answering, zero-shot and few-shot chain-of-thought
 (CoT), and self-consistency---as operators on the conditional output
-distribution and run them in a controlled factorial study across three
-locally served models (Llama 3.2 1B, Llama 3.2 3B, and
+distribution and run them through a controlled factorial study across
+three locally served models (Llama 3.2 1B, Llama 3.2 3B, and
 Qwen2.5-Coder-3B) on grade-school arithmetic (GSM8K, 100 items) and
 program synthesis (HumanEval, all 164 problems).  On GSM8K, zero-shot
-CoT lifts the 1B model from 12 to 50 percent---a gain that matches, at
+CoT lifts the 1B model from 12 to 50 percent, a gain that matches, at
 the same accuracy, the 41-point jump obtained by scaling from 1B to 3B
-under direct answering.  Few-shot CoT does the same on the 3B and
-coder models; self-consistency adds a smaller margin in uncorrected
-comparisons.  The algorithmic effect ratio on GSM8K sits between 0.82
-and 1.00 as a point estimate (the bootstrap intervals are wide), which
-is to say the technique gains survive rewording of the prompt.  On
-HumanEval the same ratio ranges from 0.25 to 0.98 and is degenerate
-where technique effects vanish.  Temperature is largely inert for
-single-sample accuracy at all three scales (endpoint movements lie
-inside the bootstrap interval), but self-consistency needs a nonzero
-temperature and is reported at its defined setting of 0.7.  We close
-with an evaluation protocol---parse rates, token cost, wall-clock
-latency, and the algorithmic effect ratio---that separates algorithmic
-from lexical contributions at small model scale.
+under direct answering.  Few-shot CoT does the same for the 3B and
+coder models.  Self-consistency, in contrast, adds only a smaller
+margin in uncorrected comparisons.  The algorithmic effect ratio on
+GSM8K sits between 0.82 and 1.00 as a point estimate, though the
+bootstrap intervals are wide; put plainly, most of the technique gains
+survive rewording of the prompt.  On HumanEval the same ratio ranges
+from 0.25 to 0.98 and turns degenerate wherever technique effects
+vanish.  Temperature is largely inert for single-sample accuracy at
+all three scales---the endpoint movements sit inside the bootstrap
+interval---but self-consistency needs a nonzero temperature and is
+reported here at its defined setting of 0.7.  We close with an
+evaluation protocol, covering parse rates, token cost, wall-clock
+latency, and the algorithmic effect ratio, built to separate
+algorithmic from lexical contributions at small model scale.
 \end{abstract}
 
 % ---------------------------------------------------------------------
@@ -121,31 +122,30 @@ decoding strategies, evaluation, algorithmic analysis.
 \label{sec:intro}
 
 Large language models (LLMs) now sit at the centre of question
-answering, code synthesis, summarisation, and tool use.  In practice
-the quality of an LLM application is shaped as much by the prompt
-surrounding a model call as by the weights inside the
-model~\cite{b1,b2}.  A growing catalogue of \emph{prompt engineering}
-techniques---zero- and few-shot exemplars, chain-of-thought
+answering, code synthesis, summarisation, and tool use.  How well an
+LLM application performs is shaped as much by the prompt surrounding
+a model call as by the weights inside the model~\cite{b1,b2}.  A
+growing catalogue of \emph{prompt engineering} techniques reports
+substantial gains on established benchmarks, often with no change to
+the underlying model: zero- and few-shot exemplars, chain-of-thought
 (CoT)~\cite{b3}, self-consistency~\cite{b4}, tree-of-thoughts
 (ToT)~\cite{b5}, ReAct~\cite{b6}, retrieval-augmented
-prompts~\cite{b7}, and automatically optimised prompts~\cite{b17}---reports
-substantial gains on established benchmarks, often with no change to
-the underlying model.
+prompts~\cite{b7}, and automatically optimised prompts~\cite{b17}.
 
-These gains are reported, but rarely decomposed.  The dominant
+These gains get reported, but rarely decomposed.  The dominant
 framing is empirical and qualitative: a technique is described by its
 template, illustrated with selected outputs, and credited with the
-benchmark delta.  The question that gets obscured is the more
-fundamental one of \emph{what the technique actually changes inside
-the model.}  We argue the principal techniques are best read as
-algorithmic operations on the conditional distribution
-$p_\theta(y \mid P, x)$ that an LLM defines over output tokens.  Under
-this view a prompt is a control input that perturbs sampling,
-restructures attention, and conditions intermediate computational
-traces.  The resulting behavioural change often rivals, and sometimes
-exceeds, the difference between adjacent model scales.
+benchmark delta.  What gets lost is the more basic question of
+\emph{what the technique actually changes inside the model.}  Our
+view is that the principal techniques are best read as algorithmic
+operations on the conditional distribution $p_\theta(y \mid P, x)$
+that an LLM defines over output tokens: a prompt, on this reading, is
+a control input that perturbs sampling, restructures attention, and
+conditions intermediate computational traces.  The resulting
+behavioural change often rivals, and sometimes exceeds, the
+difference between adjacent model scales.
 
-The contributions of this paper are as follows.
+This paper makes four contributions.
 \begin{itemize}
   \item A taxonomy that organises prompt engineering techniques by the
         algorithmic object they modify: the prompt template, the
@@ -190,17 +190,17 @@ miniature training sets.
 \subsection{Reasoning-trace construction}
 
 Wei et~al.~\cite{b3} introduced chain-of-thought prompting by
-appending intermediate reasoning steps to exemplars and reporting
-large gains on arithmetic, commonsense, and symbolic tasks.  The
-algorithmic move is to reframe generation as sampling a reasoning
-chain $r$ first, then an answer conditioned on $r$.  Wang
-et~al.~\cite{b4} extended this with self-consistency: sample many
-chains and return the most frequent answer.  The fact that
-self-consistency beats greedy CoT shows the underlying distribution is
-multimodal.  Yao et~al.~\cite{b5} generalised chains to trees, and
-Wei et~al.~\cite{b6} interleaved reasoning with tool calls in ReAct.
-The common thread across these works is to expose intermediate
-computation to the sampling operator.
+appending intermediate reasoning steps to exemplars, reporting large
+gains on arithmetic, commonsense, and symbolic tasks.  The algorithmic
+move here is to reframe generation as sampling a reasoning chain $r$
+first, then an answer conditioned on $r$.  Wang et~al.~\cite{b4}
+extended this with self-consistency: sample many chains and return
+the most frequent answer, which works because self-consistency
+beating greedy CoT is itself evidence that the underlying distribution
+is multimodal.  Chains became trees in Yao et~al.~\cite{b5}, and Wei
+et~al.~\cite{b6} interleaved reasoning with tool calls in ReAct.  What
+ties these together is that each exposes intermediate computation to
+the sampling operator.
 
 \subsection{Decoding-time and retrieval augmentation}
 
@@ -223,14 +223,15 @@ objects.
 
 The recent survey literature marks a shift from cataloguing tricks
 toward organising the field.  Sahoo et~al.~\cite{b23} systematise
-prompt engineering by application area; Liu et~al.~\cite{b24} organise
-a taxonomy along profile/instruction, knowledge, reasoning/planning,
-and reliability dimensions; Mei et~al.~\cite{b25} elevate context
-engineering to a formal discipline and flag the asymmetry between
-consuming and producing complex context as a research priority; Du
-et~al.~\cite{b26} show that temperature in multi-sample inference is
-usually left at a fixed default or tuned on scarce labelled data, with
-the optimum varying by model, task, and sampling strategy.
+prompt engineering by application area.  Liu et~al.~\cite{b24}, by
+contrast, organise a taxonomy along profile/instruction, knowledge,
+reasoning/planning, and reliability dimensions.  Mei et~al.~\cite{b25}
+go further still, elevating context engineering to a formal discipline
+and flagging the asymmetry between consuming and producing complex
+context as a research priority.  And Du et~al.~\cite{b26} show that
+temperature in multi-sample inference is usually left at a fixed
+default or tuned on scarce labelled data, with the optimum varying by
+model, task, and sampling strategy.
 
 Read together, these surveys leave three gaps.  No taxonomy,
 including the most recent ones, sorts techniques by the algorithmic
@@ -327,7 +328,7 @@ tool environment on top of a context rewrite; none is a single-factor
 intervention.  The main factorial of Section~\ref{sec:setup} therefore
 supports claims about complete configurations; single-operator claims
 are made only for self-consistency, whose two components ($m$ and
-$T$) are crossed by the design itself.  We therefore test two
+$T$) are crossed by the design itself.  This is why we test two
 hypotheses:
 
 \begin{enumerate}
@@ -478,10 +479,10 @@ follows from a standard concentration argument.
 
 The useful range of $m$ is governed by the margin $\gamma$ rather than
 by task difficulty---items with a small margin need many samples---which
-makes adaptive sample allocation profitable.  Second, self-consistency
-cannot repair a distribution whose marginal mode is wrong, since
-increasing $m$ only sharpens convergence to $y^{*}$; such errors must
-be addressed in prompt space or trace space.
+makes adaptive sample allocation profitable.  Self-consistency, though,
+cannot repair a distribution whose marginal mode is wrong: increasing
+$m$ only sharpens convergence to $y^{*}$, so such errors have to be
+addressed in prompt space or trace space instead.
 
 Tree-of-thoughts replaces sampling with search.  With branching factor
 $b$, depth $d$, and a value estimate $v(\cdot)$ over partial traces,
@@ -687,10 +688,10 @@ instruction model from Alibaba.  A reasoning-distilled third model
 evaluation templates of Section~\ref{sec:method-design} it produced
 unbounded ``thinking'' traces---internal rationale continued well
 beyond the answer slot, inflating generation cost and destabilising
-answer extraction.  A specialised code/math instruction baseline was
-adopted instead: it keeps the third scale at the same parameter order
-while testing how a domain-specialised prior interacts with the
-operator classes of Section~\ref{sec:taxonomy}.  Because
+answer extraction.  We adopted a specialised code/math instruction baseline instead,
+which keeps the third scale at the same parameter order while testing
+how a domain-specialised prior interacts with the operator classes of
+Section~\ref{sec:taxonomy}.  Because
 Qwen2.5-Coder-3B substitutes a domain-specialised model for the
 planned third scale rung, the direct scale-versus-technique comparison
 of Section~\ref{sec:results-main} rests on the two Llama models (1B
@@ -1020,9 +1021,9 @@ techniques behave differently under a specialised prior.  All three
 models run under identical CUDA-accelerated decoding on a single
 machine, so cost and latency are directly comparable.
 
-The cost--quality frontier is steepest for trace construction.  On
-GSM8K, few-shot CoT emits roughly two to five times as many tokens as
-direct answering (Table~\ref{tab:cost}), and self-consistency
+Trace construction is where the cost--quality frontier is steepest.
+On GSM8K, few-shot CoT emits roughly two to five times as many tokens
+as direct answering (Table~\ref{tab:cost}), and self-consistency
 multiplies that by $m = 4$ while adding only a fraction of the
 accuracy it costs in tokens.  Per token, direct answering is the
 most efficient configuration; few-shot CoT buys a large accuracy
@@ -1031,9 +1032,9 @@ gain at a fourfold cost.  The ranking by cost-adjusted accuracy
 therefore depends on the budget, which is why token cost and latency
 are reported alongside accuracy throughout.
 
-The flat HumanEval column is itself a finding.  Techniques that
+There is a finding in the flat HumanEval column too.  Techniques that
 restructure the trace help where the answer is the product of
-intermediate computation (GSM8K) and help little, or hurt, where the
+intermediate computation (GSM8K), and help little, or hurt, where the
 output is checkable by execution (code).  The individual HumanEval
 deltas lie inside the reported interval, so the strength of this
 reading lies in the direction being consistent across all three
@@ -1046,15 +1047,15 @@ the scales tested (all endpoint changes lie inside the reported
 interval), while sampling-based techniques such as self-consistency
 require a nonzero temperature to be defined at all.
 
-The ensemble perspective has a bias dimension.  Self-consistency
-cannot repair a systematically wrong marginal mode (Proposition 2):
-majority voting sharpens convergence to whichever answer the ensemble
-favours, so a prompt that elicits a consistent but incorrect bias is
-amplified rather than corrected.  Parse failures, counted as errors
-and reported separately, are a second source of systematic loss: a
-technique that raises accuracy only by changing the answer format
-trades one kind of failure for another unless parse rates are
-reported.
+Self-consistency's ensemble framing carries a bias dimension of its
+own.  It cannot repair a systematically wrong marginal mode
+(Proposition 2): majority voting sharpens convergence to whichever
+answer the ensemble favours, so a prompt that elicits a consistent
+but incorrect bias gets amplified rather than corrected.  Parse
+failures, counted as errors and reported separately, are a second
+source of systematic loss---a technique that raises accuracy only by
+changing the answer format trades one kind of failure for another
+unless parse rates are reported.
 
 \section{Limitations and Threats to Validity}
 \label{sec:limitations}
@@ -1092,8 +1093,9 @@ artefacts, and costs are single-run estimates on a single machine.
 \section{Conclusion}
 \label{sec:conclusion}
 
-Prompt engineering techniques are best read as algorithmic operators
-on the conditional output distribution.  Our controlled factorial
+Framed algorithmically, prompt engineering techniques act as
+operators on the conditional output distribution rather than as
+incidental changes to a string of text.  Our controlled factorial
 study shows their measured effects are separable from both prompt
 wording and decoding configuration: the algorithmic effect of a
 technique is comparable in size to the effect of model scale in the
