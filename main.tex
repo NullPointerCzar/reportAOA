@@ -88,10 +88,11 @@ tasks, grade-school arithmetic (GSM8K, 100 items) and program
 synthesis (HumanEval, 164 problems).  On GSM8K, zero-shot CoT raised
 accuracy from 12 percent to 50 percent on the 1B model, a gain
 comparable to the 41-point improvement from scaling the model from
-1B to 3B.  Few-shot CoT and self-consistency raised accuracy
-substantially at the 3B and coder scales.  On GSM8K the algorithmic
+1B to 3B.  Few-shot CoT raised accuracy
+substantially at the 3B and coder scales, and self-consistency did so
+in uncorrected comparisons.  On GSM8K the algorithmic
 effect ratio is near one (0.82--1.00) as a point estimate, although
-the bootstrap intervals around these estimates are wide; the
+the bootstrap intervals are wide; the
 technique gains largely survive rewording of the prompt.  On HumanEval
 it is mixed (0.25--0.98) and degenerate where the technique effects
 vanish.
@@ -99,7 +100,7 @@ Temperature
 interacts with sampling-based techniques: self-consistency requires a
 nonzero temperature and is reported at its defined setting 0.7, while
 single-sample accuracy moves little with temperature at all three
-scales, with the observed endpoint changes within the bootstrap
+scales, with the endpoint changes within the bootstrap
 interval.  We conclude with an
 evaluation protocol---parse rates, token cost, wall-clock latency,
 and the algorithmic effect ratio---that makes algorithmic and lexical
@@ -699,7 +700,7 @@ direct answering (12\% to 53\%).  Few-shot CoT helps the 3B model
 the 1B model (12\% to 8\%) lies within the reported interval and is
 not distinguishable from noise at this sample size.
 Self-consistency adds a further gain over
-few-shot CoT at the 3B model (70\% to 79\%), whose 95\%
+few-shot CoT at the 3B model (70\% to 79\%), whose uncorrected 95\%
 paired-difference interval excludes zero, and a smaller gain at the
 coder scale (71\% to 74\%), whose interval includes zero, at a
 fourfold token cost (Tables~\ref{tab:results} and~\ref{tab:cost}).
@@ -710,7 +711,8 @@ without intermediate reasoning.  On HumanEval the ordering is
 compressed: no technique improves pass@1 by more than three points,
 zero-shot CoT is neutral or negative, and self-consistency is the
 weakest configuration at every scale (Table~\ref{tab:results}); the
-shortfall relative to direct answering is significant at the 1B model
+shortfall relative to direct answering is significant in uncorrected
+comparisons at the 1B model
 ($-11$ points; 95\% CI [$-16.5$, $-6.1$]) and the 3B model ($-8.5$;
 [$-14.0$, $-3.0$]) and directionally consistent at the coder model,
 so its strength comes from both the individual paired differences and
@@ -726,6 +728,11 @@ $p < 0.001$) and at the 1B HumanEval scale (corrected $p = 0.027$),
 and few-shot CoT is significant at the 3B (corrected $p = 0.008$) and
 coder (corrected $p < 0.001$) GSM8K scales; no other technique effect
 survives correction.
+Self-consistency was excluded from this corrected family because its
+reference cell ($T = 0.7$) differs from the $T = 0$ cell at which
+zero-shot and few-shot CoT are compared with direct answering; the
+confidence intervals reported for self-consistency in this section are
+uncorrected.
 
 \subsection{Decoding interactions}
 \label{sec:results-decoding}
