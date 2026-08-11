@@ -64,7 +64,7 @@ Effect on Large Language Model Output}
 \IEEEauthorblockA{\textit{Department of Electronics and Computer Engineering} \\
                  \textit{National College of Engineering, Tribhuvan University} \\
                  Kathmandu, Nepal \\
-                 brishavjoshi2081@gamil.com}
+                 brishavjoshi2081@gmail.com}
 }
 
 \maketitle
@@ -75,36 +75,33 @@ Effect on Large Language Model Output}
 %  rule).  No math, no symbols, no footnotes.  See AGENTS.md §4.3.
 % ---------------------------------------------------------------------
 \begin{abstract}
-Prompt engineering techniques are widely reported to improve the
-output of large language models (LLMs), but their measured effects
-are rarely separated from the wording of the prompt or from the
-decoding configuration used to produce the output.  This paper treats
-four prompting techniques---direct answering, zero-shot and few-shot
-chain-of-thought (CoT), and self-consistency---as algorithmic
-operators on the conditional output distribution and evaluates them
-in a controlled factorial study across three locally served
-models (Llama 3.2 1B, Llama 3.2 3B, and Qwen2.5-Coder-3B) on two
-tasks, grade-school arithmetic (GSM8K, 100 items) and program
-synthesis (HumanEval, 164 problems).  On GSM8K, zero-shot CoT raised
-accuracy from 12 percent to 50 percent on the 1B model, a gain
-comparable to the 41-point improvement from scaling the model from
-1B to 3B.  Few-shot CoT raised accuracy
-substantially at the 3B and coder scales, and self-consistency did so
-in uncorrected comparisons.  On GSM8K the algorithmic
-effect ratio is near one (0.82--1.00) as a point estimate, although
-the bootstrap intervals are wide; the
-technique gains largely survive rewording of the prompt.  On HumanEval
-it is mixed (0.25--0.98) and degenerate where the technique effects
-vanish.
-Temperature
-interacts with sampling-based techniques: self-consistency requires a
-nonzero temperature and is reported at its defined setting 0.7, while
-single-sample accuracy moves little with temperature at all three
-scales, with the endpoint changes within the bootstrap
-interval.  We conclude with an
-evaluation protocol---parse rates, token cost, wall-clock latency,
-and the algorithmic effect ratio---that makes algorithmic and lexical
-contributions separable at small model scale.
+Prompt engineering techniques raise benchmark scores for large
+language models (LLMs).  Most reports, though, do not separate the
+part of the gain that comes from a technique's algorithmic structure
+from the part that comes from how the prompt happens to be worded or
+how the output was decoded.  We treat four prompting
+techniques---direct answering, zero-shot and few-shot chain-of-thought
+(CoT), and self-consistency---as operators on the conditional output
+distribution and run them through a controlled factorial study across
+three locally served models (Llama 3.2 1B, Llama 3.2 3B, and
+Qwen2.5-Coder-3B) on grade-school arithmetic (GSM8K, 100 items) and
+program synthesis (HumanEval, all 164 problems).  On GSM8K, zero-shot
+CoT lifts the 1B model from 12 to 50 percent, a gain that matches, at
+the same accuracy, the 41-point jump obtained by scaling from 1B to 3B
+under direct answering.  Few-shot CoT does the same for the 3B and
+coder models.  Self-consistency, in contrast, adds only a smaller
+margin in uncorrected comparisons.  The algorithmic effect ratio on
+GSM8K sits between 0.82 and 1.00 as a point estimate, though the
+bootstrap intervals are wide; put plainly, most of the technique gains
+survive rewording of the prompt.  On HumanEval the same ratio ranges
+from 0.25 to 0.98 and turns degenerate wherever technique effects
+vanish.  Temperature is largely inert for single-sample accuracy at
+all three scales---the endpoint movements sit inside the bootstrap
+interval---but self-consistency needs a nonzero temperature and is
+reported here at its defined setting of 0.7.  We close with an
+evaluation protocol, covering parse rates, token cost, wall-clock
+latency, and the algorithmic effect ratio, built to separate
+algorithmic from lexical contributions at small model scale.
 \end{abstract}
 
 % ---------------------------------------------------------------------
@@ -124,31 +121,31 @@ decoding strategies, evaluation, algorithmic analysis.
 \section{Introduction}
 \label{sec:intro}
 
-Large language models (LLMs) are now routinely deployed for question
-answering, code synthesis, summarisation, and tool use, and the
-practical quality of an LLM application is shaped as much by the
-prompt that surrounds a model call as by the model weights
-themselves~\cite{b1,b2}.  A growing catalogue of \emph{prompt
-engineering} techniques---zero- and few-shot exemplars,
-chain-of-thought (CoT)~\cite{b3}, self-consistency~\cite{b4},
-tree-of-thoughts (ToT)~\cite{b5}, ReAct~\cite{b6}, and
-retrieval-augmented prompts~\cite{b7}, and automatically optimised
-prompts~\cite{b17}---reports substantial gains on established
-benchmarks, often with no change to the underlying model.
+Large language models (LLMs) now sit at the centre of question
+answering, code synthesis, summarisation, and tool use.  How well an
+LLM application performs is shaped as much by the prompt surrounding
+a model call as by the weights inside the model~\cite{b1,b2}.  A
+growing catalogue of \emph{prompt engineering} techniques reports
+substantial gains on established benchmarks, often with no change to
+the underlying model: zero- and few-shot exemplars, chain-of-thought
+(CoT)~\cite{b3}, self-consistency~\cite{b4}, tree-of-thoughts
+(ToT)~\cite{b5}, ReAct~\cite{b6}, retrieval-augmented
+prompts~\cite{b7}, and automatically optimised prompts~\cite{b17}.
 
-The dominant framing is empirical and qualitative: a technique is
-described by its template and illustrated with selected outputs, which
-obscures the more fundamental question of \emph{what the technique
-changes inside the model.}  We argue that the principal techniques are
-best understood as algorithmic operations on the conditional
-distribution $p_\theta(y \mid P, x)$ that an LLM defines over output
-tokens; under this view a prompt is a control input that perturbs
-sampling, restructures attention, and conditions intermediate
-computational traces, and the resulting behavioural change often
-rivals, and sometimes exceeds, the difference between adjacent model
-scales.
+These gains get reported, but rarely decomposed.  The dominant
+framing is empirical and qualitative: a technique is described by its
+template, illustrated with selected outputs, and credited with the
+benchmark delta.  What gets lost is the more basic question of
+\emph{what the technique actually changes inside the model.}  Our
+view is that the principal techniques are best read as algorithmic
+operations on the conditional distribution $p_\theta(y \mid P, x)$
+that an LLM defines over output tokens: a prompt, on this reading, is
+a control input that perturbs sampling, restructures attention, and
+conditions intermediate computational traces.  The resulting
+behavioural change often rivals, and sometimes exceeds, the
+difference between adjacent model scales.
 
-The contributions of this paper are as follows.
+This paper makes four contributions.
 \begin{itemize}
   \item A taxonomy that organises prompt engineering techniques by the
         algorithmic object they modify: the prompt template, the
@@ -166,11 +163,11 @@ The contributions of this paper are as follows.
         lexical contributions separable.
 \end{itemize}
 
-The remainder of this paper is organised as follows.  Section~II
-reviews prior surveys and foundational techniques; Section~III
-taxonomy and notation; Section~IV the algorithmic effect of each
-technique; Section~V the experimental design; Section~VI the results;
-and Sections~VII--IX the discussion, limitations, and conclusion.
+Section~II reviews prior surveys and foundational techniques;
+Section~III gives the taxonomy and notation; Section~IV the
+algorithmic effect of each technique; Section~V the experimental
+design; Section~VI the results; Sections~VII--IX the discussion,
+limitations, and conclusion.
 
 % ---------------------------------------------------------------------
 
@@ -178,93 +175,93 @@ and Sections~VII--IX the discussion, limitations, and conclusion.
 \label{sec:related}
 
 The prompt engineering literature spans prompting patterns,
-decoding-time methods, and reasoning-trace construction.  We
-organise the review along the same three axes used in our taxonomy
-(Section~III).
+decoding-time methods, and reasoning-trace construction.  The review
+follows the same three axes used in the taxonomy of Section~III.
 
 \subsection{Prompting patterns as control inputs}
 
 Brown et~al.~\cite{b1} showed that scaling produces \emph{in-context
-learning}, in which a few exemplars elicit task behaviour without
-weight updates.  Min et~al.~\cite{b2} showed that ground-truth labels
-in exemplars contribute less than the input--output format, evidence
-that prompts act partly as structural scaffolds.
+learning}: a few exemplars elicit task behaviour without weight
+updates.  Min et~al.~\cite{b2} then showed that ground-truth labels in
+exemplars contribute less than the input--output format---evidence
+that prompts act partly as structural scaffolds rather than as
+miniature training sets.
 
 \subsection{Reasoning-trace construction}
 
-Wei et~al.~\cite{b3} introduced chain-of-thought prompting, appending
-intermediate reasoning steps to exemplars and observing large gains
-on arithmetic, commonsense, and symbolic tasks, reframing generation
-as sampling a reasoning chain $r$ and then an answer conditioned on
-it.  Wang et~al.~\cite{b4} extended this with self-consistency,
-sampling multiple chains and taking the most frequent answer; the
-gain over greedy CoT shows that the underlying distribution is
-multimodal.  Yao et~al.~\cite{b5} generalised chains to trees, and
-Wei et~al.~\cite{b6} interleaved reasoning with tool calls in ReAct.
-Across these works, the common algorithmic move is to expose
-intermediate computation to the sampling operator.
+Wei et~al.~\cite{b3} introduced chain-of-thought prompting by
+appending intermediate reasoning steps to exemplars, reporting large
+gains on arithmetic, commonsense, and symbolic tasks.  The algorithmic
+move here is to reframe generation as sampling a reasoning chain $r$
+first, then an answer conditioned on $r$.  Wang et~al.~\cite{b4}
+extended this with self-consistency: sample many chains and return
+the most frequent answer, which works because self-consistency
+beating greedy CoT is itself evidence that the underlying distribution
+is multimodal.  Chains became trees in Yao et~al.~\cite{b5}, and Wei
+et~al.~\cite{b6} interleaved reasoning with tool calls in ReAct.  What
+ties these together is that each exposes intermediate computation to
+the sampling operator.
 
 \subsection{Decoding-time and retrieval augmentation}
 
-Beyond reasoning traces, decoding-time methods such as temperature,
-top-$k$, and nucleus (top-$p$) sampling~\cite{b8} directly parametrise
-the output distribution, and retrieval-augmented generation (RAG)
-conditions generation on documents fetched at inference time; in our
-framing RAG is a prompting technique, since it rewrites the
-conditioning context $P$ of $p_\theta(y \mid P, x)$.
+Reasoning traces are not the only handle.  Temperature, top-$k$, and
+nucleus (top-$p$) sampling~\cite{b8} parametrise the output
+distribution directly, and retrieval-augmented generation (RAG)
+conditions generation on documents fetched at inference time.  In our
+framing RAG is a prompting technique: it rewrites the conditioning
+context $P$ of $p_\theta(y \mid P, x)$.
 
 \subsection{Common notation and primer}
 \label{sec:notation}
 
 Throughout, $P$ is a prompt template, $x$ the user input, and $y$ the
 model output; decoding is parameterised by temperature $T$, a top-$k$
-cutoff, and a nucleus threshold $p$.  All objects are formalised in
-Section~IV.
+cutoff, and a nucleus threshold $p$.  Section~IV formalises these
+objects.
 
 \subsection{Synthesis and research gap}
 
 The recent survey literature marks a shift from cataloguing tricks
 toward organising the field.  Sahoo et~al.~\cite{b23} systematise
-prompt engineering by application area; Liu et~al.~\cite{b24} organise
-a taxonomy along profile/instruction, knowledge, reasoning/planning,
-and reliability dimensions; Mei et~al.~\cite{b25} elevate context
-engineering to a formal discipline and flag the asymmetry between
-consuming and producing complex context as a research priority; and
-Du et~al.~\cite{b26} show that temperature in multi-sample inference
-is usually left at a fixed default or tuned on scarce labelled data,
-with the optimum varying by model, task, and sampling strategy.
+prompt engineering by application area.  Liu et~al.~\cite{b24}, by
+contrast, organise a taxonomy along profile/instruction, knowledge,
+reasoning/planning, and reliability dimensions.  Mei et~al.~\cite{b25}
+go further still, elevating context engineering to a formal discipline
+and flagging the asymmetry between consuming and producing complex
+context as a research priority.  And Du et~al.~\cite{b26} show that
+temperature in multi-sample inference is usually left at a fixed
+default or tuned on scarce labelled data, with the optimum varying by
+model, task, and sampling strategy.
 
-Taken together, these works expose three things the field still
-lacks.  First, to our knowledge, no taxonomy---including the most
-recent ones---sorts techniques by the algorithmic object they
-modify: the surveys organise by application~\cite{b15,b23} or
-intended function~\cite{b16,b24}, so techniques with identical
-algorithmic structure, such as few-shot exemplars and retrieval
-injection, which both rewrite the conditioning context, fall into
-different cells.  Second, empirical evaluations confound the two
-factors this paper treats as separable: the prompt is varied while
-decoding remains at a fixed default, so a reported gain cannot be
+Read together, these surveys leave three gaps.  No taxonomy,
+including the most recent ones, sorts techniques by the algorithmic
+object they modify: the existing surveys organise by
+application~\cite{b15,b23} or intended function~\cite{b16,b24}, which
+places few-shot exemplars and retrieval injection---two operators with
+the same algorithmic structure, both rewriting the conditioning
+context---into different cells.  Empirical evaluations confound the
+two factors this paper treats as separable: the prompt is varied
+while decoding stays at a fixed default, so a reported gain cannot be
 attributed to the template rather than the decoding configuration,
-and the interaction between sampling strategy and temperature
-that~\cite{b26} documents is rarely controlled for.  Third, no
-evaluation protocol separates lexical from algorithmic
-contributions; there is no standard way to report how much of a gain
-survives rewording, and no requirement to report distribution-level
-evidence such as per-token divergence, entropy, or realised support
-width.
+and the interaction between sampling strategy and temperature that
+\cite{b26} documents is rarely controlled for.  And no evaluation
+protocol separates lexical from algorithmic contributions: there is no
+standard way to report how much of a gain survives rewording, and no
+requirement to report distribution-level evidence such as per-token
+divergence, entropy, or realised support width.
 
-This paper is arranged so that each gap is closed by a specific
-design choice.  The taxonomy of Section~\ref{sec:taxonomy} makes the
-algorithmic object the organising axis, so the functional dimensions
-of \cite{b24} and the application areas of \cite{b23} become derived
-categories rather than primary ones.  The controlled ablation of
-Section~\ref{sec:method-design} is the comparison the surveys
-motivate but do not run: a fully crossed factorial that varies
+The rest of the paper is arranged so that each gap is closed by a
+specific design choice.  The taxonomy of Section~\ref{sec:taxonomy}
+makes the algorithmic object the organising axis, so the functional
+dimensions of \cite{b24} and the application areas of \cite{b23}
+become derived categories rather than primary ones.  The controlled
+ablation of Section~\ref{sec:method-design} is the comparison the
+surveys motivate but do not run: a fully crossed factorial that varies
 technique configuration, wording, and decoding independently, turning
 the confound above into a measurable interaction term.  The
 evaluation protocol of Sections~\ref{sec:aer} and~\ref{sec:method-tools}
 reports, alongside accuracy, the parse rates, token cost, wall-clock
-latency, and the algorithmic effect ratio, the decoding-aware
+latency, and the algorithmic effect ratio---the decoding-aware
 reporting that~\cite{b26} shows to be necessary and that makes
 lexical and algorithmic contributions separable even where
 distribution-level measurements are unavailable.
@@ -272,32 +269,67 @@ distribution-level measurements are unavailable.
 \section{Taxonomy of Prompt Engineering Techniques}
 \label{sec:taxonomy}
 
-A technique that improves a benchmark score tells us little by itself, because the improvement may originate at any of three points in the generation pipeline; we therefore classify techniques by the object they modify rather than by their surface form.
+A technique that improves a benchmark score tells us little by itself:
+the improvement may originate at any of three points in the generation
+pipeline.  We therefore classify techniques by the object they modify
+rather than by their surface form.
 
 \subsection{Three operator classes}
 
 \textbf{Definition 1} (Prompting method). \textit{A prompting method is a triple $M = (\Phi, \Psi, \Omega)$, where $\Phi$ is a prompt-space operator acting on the conditioning context, $\Psi$ a decoding-space operator acting on the per-step token distribution, and $\Omega$ a trace-space operator acting on the intermediate sequences generated before the answer is emitted; any component may be the identity.}
 
-Definition~1 is deliberately coarse: two techniques described very
+Definition~1 is deliberately coarse.  Two techniques described very
 differently in prose may occupy the same cell, and two presented as
 variants may not.  Table~\ref{tab:taxonomy} assigns the principal
 techniques to cells and records the cost each incurs.
 
 \subsection{Prompt-space operators}
 
-Prompt-space operators rewrite the conditioning context and leave both the decoding policy and the generated trace untouched; instruction rewriting, role conditioning, exemplar selection, output-format scaffolding, and retrieval injection all belong here. Retrieval is the outlier: it returns a different document set for different inputs, so the operator is stochastic even when the template is fixed, and its variance is attributed to the prompt unless the retrieved set is logged.
+Prompt-space operators rewrite the conditioning context and leave
+both the decoding policy and the generated trace untouched:
+instruction rewriting, role conditioning, exemplar selection,
+output-format scaffolding, and retrieval injection all belong here.
+Retrieval is the outlier---it returns a different document set for
+different inputs, so the operator is stochastic even when the template
+is fixed.  Its variance is attributed to the prompt unless the
+retrieved set is logged.
 
 \subsection{Decoding-space operators}
 
-Decoding-space operators leave the context untouched and reshape the per-step distribution before a token is drawn: temperature scaling is a smooth reparametrisation, top-$k$ and nucleus sampling restrict the support, and beam search replaces sampling with an approximate sequence search. These are the only operators applicable without changing a single character of the prompt, which makes them the natural control condition for the experiments in Section~\ref{sec:setup}.
+Decoding-space operators leave the context untouched and reshape the
+per-step distribution before a token is drawn.  Temperature scaling is
+a smooth reparametrisation, top-$k$ and nucleus sampling restrict the
+support, and beam search replaces sampling with an approximate
+sequence search.  These are the only operators applicable without
+changing a single character of the prompt, which makes them the
+natural control condition for the experiments in
+Section~\ref{sec:setup}.
 
 \subsection{Trace-space operators}
 
-Trace-space operators change what the model generates before committing to an answer: zero-shot CoT~\cite{b9} adds a trigger phrase, tree-of-thoughts maintains a frontier of partial traces expanded under a value estimate, self-consistency draws several chains and aggregates them, and iterative refinement~\cite{b12} repeats generation--critique cycles. None is free: each buys accuracy with tokens, forward passes, or both, and Table~\ref{tab:taxonomy} records the exchange rate.
+Trace-space operators change what the model generates before
+committing to an answer.  Zero-shot CoT~\cite{b9} adds a trigger
+phrase, tree-of-thoughts maintains a frontier of partial traces
+expanded under a value estimate, self-consistency draws several
+chains and aggregates them, and iterative refinement~\cite{b12}
+repeats generation--critique cycles.  None is free: each buys
+accuracy with tokens, forward passes, or both, and
+Table~\ref{tab:taxonomy} records the exchange rate.
 
 \subsection{Composition and interaction}
 
-The three operator classes do not compose independently. Self-consistency requires $T > 0$---$m$ greedy samples are $m$ copies of one chain---so its trace-space effect is only defined relative to a decoding-space operator that supplies diversity. Few-shot CoT couples $\Phi$ and $\Omega$ because the exemplars carry the traces, tree-of-thoughts couples trace construction with value-guided search, and ReAct adds a tool environment on top of a context rewrite; none is a single-factor intervention. The main factorial of Section~\ref{sec:setup} therefore supports claims about complete configurations; single-operator claims are made only for self-consistency, whose two components ($m$ and $T$) are crossed by the design itself. We therefore test two hypotheses:
+The three operator classes do not compose independently.  Self-consistency
+requires $T > 0$---$m$ greedy samples are $m$ copies of one chain---so
+its trace-space effect is only defined relative to a decoding-space
+operator that supplies diversity.  Few-shot CoT couples $\Phi$ and
+$\Omega$ because the exemplars carry the traces, tree-of-thoughts
+couples trace construction with value-guided search, and ReAct adds a
+tool environment on top of a context rewrite; none is a single-factor
+intervention.  The main factorial of Section~\ref{sec:setup} therefore
+supports claims about complete configurations; single-operator claims
+are made only for self-consistency, whose two components ($m$ and
+$T$) are crossed by the design itself.  This is why we test two
+hypotheses:
 
 \begin{enumerate}
     \item[H1] Holding the algorithmic structure of a prompt fixed, paraphrasing its wording produces a smaller change in task accuracy than moving between technique configurations (cells of Table~\ref{tab:taxonomy}).
@@ -324,7 +356,11 @@ p_\theta(y_t = v \mid y_{<t}, P, x) = \frac{\exp(z_{t,v})}{\sum_{u \in \mathcal{
 \label{eq:softmax}
 \end{equation}
 
-Equations~\eqref{eq:autoreg} and~\eqref{eq:softmax} contain every quantity a prompting technique can touch: it either changes $z_{t}$ through the conditioning arguments, changes the map from $z_{t}$ to a sampled token, or changes which sequences are generated and how they are combined.
+Equations~\eqref{eq:autoreg} and~\eqref{eq:softmax} contain every
+quantity a prompting technique can touch: it either changes $z_{t}$
+through the conditioning arguments, changes the map from $z_{t}$ to a
+sampled token, or changes which sequences are generated and how they
+are combined.
 
 \subsection{Prompt-space operators as logit displacement}
 \label{sec:prompt-operators}
@@ -336,23 +372,34 @@ Let $\Phi : P \mapsto P'$ and write $z_t(P)$ for the logits obtained under conte
 \label{eq:delta}
 \end{equation}
 
-Because the softmax in~\eqref{eq:softmax} is invariant to adding a constant to every logit, only the component of $\Delta_{t}$ orthogonal to $\mathbf{1}$ has any behavioural consequence. The effective displacement is therefore the centred vector
+Because the softmax in~\eqref{eq:softmax} is invariant to adding a
+constant to every logit, only the component of $\Delta_{t}$ orthogonal
+to $\mathbf{1}$ has any behavioural consequence.  The effective
+displacement is therefore the centred vector
 
 \begin{equation}
 \hat{\Delta}_{t}(\Phi) = \Delta_{t}(\Phi) - \frac{1}{|\mathcal{V}|}\big(\mathbf{1}^{\top}\Delta_{t}(\Phi)\big)\mathbf{1},
 \label{eq:centred-delta}
 \end{equation}
 
-and $\|\hat{\Delta}_{t}\|_{2}$ is a scalar summary of how hard the rewrite pushed on the model at step $t$; a prompt edit that raises every logit uniformly, for instance one that only lengthens the context without adding discriminative content, has $\hat{\Delta}_{t} \approx 0$ and cannot change behaviour no matter how many tokens it costs.
+and $\|\hat{\Delta}_{t}\|_{2}$ is a scalar summary of how hard the
+rewrite pushed on the model at step $t$.  A prompt edit that raises
+every logit uniformly---one that only lengthens the context without
+adding discriminative content---has $\hat{\Delta}_{t} \approx 0$ and
+cannot change behaviour no matter how many tokens it costs.
 
-A second, coarser summary is the divergence induced at the distribution level.  Writing $p_{t} = p_{\theta}(\cdot \mid y_{<t}, P, x)$ and $p_{t}' = p_{\theta}(\cdot \mid y_{<t}, P', x)$,
+A second, coarser summary is the divergence induced at the
+distribution level.  Writing $p_{t} = p_{\theta}(\cdot \mid y_{<t}, P, x)$ and $p_{t}' = p_{\theta}(\cdot \mid y_{<t}, P', x)$,
 
 \begin{equation}
 D_{\Phi} = \mathbb{E}_{x}\left[ |y|^{-1} \sum_{t=1}^{|y|} D_{\mathrm{KL}}\left( p_{t}' \, \| \, p_{t} \right) \right],
 \label{eq:divergence}
 \end{equation}
 
-which we report per token so that prompts of different lengths remain comparable; attention offers a third view, since the mass a head places on a newly inserted span reveals whether the model actually reads the added text.
+which we report per token so that prompts of different lengths remain
+comparable.  Attention offers a third view: the mass a head places on
+a newly inserted span tells us whether the model actually reads the
+added text.
 
 \subsection{Decoding-space operators as measure transforms}
 \label{sec:decoding-operators}
@@ -364,77 +411,137 @@ q_{T}(v) = \frac{\exp(z_{v} / T)}{\sum_{u} \exp(z_{u} / T)},
 \label{eq:temperature}
 \end{equation}
 
-a Gibbs family whose entropy $H(q_{T})$ is non-decreasing in $T$, approaching a point mass on $\arg\max_{v} z_{v}$ as $T \to 0^{+}$ and the uniform distribution as $T \to \infty$; temperature is thus a continuous interpolation between the maximisation and uniform-exploration regimes.
+a Gibbs family whose entropy $H(q_{T})$ is non-decreasing in $T$,
+approaching a point mass on $\arg\max_{v} z_{v}$ as $T \to 0^{+}$ and
+the uniform distribution as $T \to \infty$.  Temperature is thus a
+continuous interpolation between the maximisation and
+uniform-exploration regimes.
 
-Truncation operators behave differently. Let $\pi$ order $\mathcal{V}$ by decreasing probability. Top-$k$ retains $S_{k} = \{\pi_{1}, \ldots, \pi_{k}\}$ and nucleus sampling retains the smallest prefix whose mass reaches $p$,
+Truncation operators behave differently.  Let $\pi$ order $\mathcal{V}$
+by decreasing probability.  Top-$k$ retains $S_{k} = \{\pi_{1}, \ldots,
+\pi_{k}\}$ and nucleus sampling retains the smallest prefix whose
+mass reaches $p$,
 
 \begin{equation}
 S_{p} = \left\{\pi_{1}, \dots, \pi_{\kappa}\right\}, \quad \kappa = \min\left\{j: \sum_{i \leq j} q(\pi_{i}) \geq p\right\},
 \label{eq:nucleus}
 \end{equation}
 
-after which the retained mass is renormalised; both discard the tail, but in different ways.
+after which the retained mass is renormalised.  Both discard the
+tail, but in different ways.
 
 \textbf{Proposition 1 (Support and entropy bounds).} \textit{Let $q^{(k)}$ be the renormalisation of $q$ onto $S_k$. Then $|\operatorname{supp}(q^{(k)})| \leq k$ and $H(q^{(k)}) \leq \log k$, both independent of the context. For nucleus sampling the analogous bound is $H(q^{(p)}) \leq \log \kappa(x, t)$, where $\kappa$ is a function of the step-level distribution and is therefore not fixed in advance.}
 
-Proposition 1 explains an asymmetry that is often observed but rarely stated: top-$k$ imposes a hard, context-independent ceiling on per-step diversity, whereas nucleus sampling lets the ceiling float with the model's own confidence, contracting the support where the model is certain and widening it where it is not. Reporting a single top-$p$ value without the resulting $\kappa$ statistics therefore conveys much less information than it appears to.
+Proposition 1 explains an asymmetry that is often observed but rarely
+stated: top-$k$ imposes a hard, context-independent ceiling on
+per-step diversity, whereas nucleus sampling lets the ceiling float
+with the model's own confidence, contracting the support where the
+model is certain and widening it where it is not.  Reporting a single
+top-$p$ value without the resulting $\kappa$ statistics therefore
+conveys much less information than it appears to.
 
 \subsection{Trace-space operators as marginalisation and search}
 \label{sec:trace-operators}
 
-Let $r$ denote an intermediate trace. The answer distribution the model actually defines is the marginal
+Let $r$ denote an intermediate trace.  The answer distribution the model actually defines is the marginal
 
 \begin{equation}
 p_{\theta}(y \mid P, x) = \sum_{r} p_{\theta}(y \mid r, P, x) \, p_{\theta}(r \mid P, x).
 \label{eq:marginal}
 \end{equation}
 
-Direct answering approximates $\arg\max_{y}$ of~\eqref{eq:marginal} without ever materialising $r$. Greedy CoT does something different: it materialises one trace and returns the answer attached to it, which approximates
+Direct answering approximates $\arg\max_{y}$ of~\eqref{eq:marginal}
+without ever materialising $r$.  Greedy CoT does something different:
+it materialises one trace and returns the answer attached to it, which
+approximates
 
 \begin{equation}
 \hat{y}_{\mathrm{CoT}} = \arg\max_{y} \max_{r} p_{\theta}(y, r \mid P, x),
 \label{eq:cot-joint}
 \end{equation}
 
-the joint mode rather than the marginal mode. The two need not coincide.
+the joint mode rather than the marginal mode.  The two need not
+coincide.
 
 \textbf{Proposition 2 (Mode mismatch).} \textit{There exist distributions for which $\arg\max_y\max_r p(y,r) \neq \arg\max_y\sum_r p(y,r)$.}
 
 \textit{Proof.} Take two answers and three traces with $p(y_{1}, r_{1}) = 0.30$ and the remaining joint mass spread uniformly over the three traces for $y_{2}$. The joint mode selects $y_{1}$ (0.30), but the marginals satisfy $p(y_{1}) = 0.30 < p(y_{2}) = 0.70$. $\blacksquare$
 
-Proposition 2 is the algorithmic content of self-consistency. Drawing $m$ traces and taking the plurality answer is a Monte Carlo estimator of the marginal mode, so the technique corrects a systematic bias in greedy CoT rather than merely averaging away noise. Its reliability follows from a standard concentration argument.
+Proposition 2 is the algorithmic content of self-consistency.  Drawing
+$m$ traces and taking the plurality answer is a Monte Carlo estimator
+of the marginal mode, so the technique corrects a systematic bias in
+greedy CoT rather than merely averaging away noise.  Its reliability
+follows from a standard concentration argument.
 
 \textbf{Proposition 3 (Vote concentration).} \textit{Let $y^{\star}$ maximise the marginal with mass $q^{\star}$, let $q'$ be the largest mass on any other answer, and let $\gamma = q^{\star} - q' > 0$. For $m$ i.i.d. traces, the plurality vote returns $y^{\star}$ with probability at least $1 - (|\mathcal{Y}| - 1)\exp(-m\gamma^{2} /2)$.}
 
 \textit{Proof.} For each competing answer apply Hoeffding's inequality to the difference of the two empirical frequencies, which has mean $\gamma$ and bounded increments, then take a union bound over the at most $|\mathcal{Y}| - 1$ competitors. $\blacksquare$
 
-The useful range of $m$ is governed by the margin $\gamma$ rather than by task difficulty---items with a small margin need many samples---which makes adaptive sample allocation profitable. Second, self-consistency cannot repair a distribution whose marginal mode is wrong, since increasing $m$ only sharpens convergence to $y^{*}$; such errors must be addressed in prompt space or trace space.
+The useful range of $m$ is governed by the margin $\gamma$ rather than
+by task difficulty---items with a small margin need many samples---which
+makes adaptive sample allocation profitable.  Self-consistency, though,
+cannot repair a distribution whose marginal mode is wrong: increasing
+$m$ only sharpens convergence to $y^{*}$, so such errors have to be
+addressed in prompt space or trace space instead.
 
-Tree-of-thoughts replaces sampling with search. With branching factor $b$, depth $d$, and a value estimate $v(\cdot)$ over partial traces, the method returns
+Tree-of-thoughts replaces sampling with search.  With branching factor
+$b$, depth $d$, and a value estimate $v(\cdot)$ over partial traces,
+the method returns
 
 \begin{equation}
 \hat{y}_{\mathrm{ToT}} = \arg\max_{y} \max_{r \in \mathcal{R}_{b,d}} v(r) \, p_{\theta}(y \mid r, P, x),
 \label{eq:tot}
 \end{equation}
 
-where $\mathcal{R}_{b,d}$ is the set of traces the search actually visits; the model's own trace probability is partly replaced by an external value signal, so ToT inherits the quality of $v$. ReAct is the same substitution carried out by the environment instead of a value function: the trace interleaves actions with observations $o_{1:n}$, and the conditioning distribution becomes $p_{\theta}(y \mid P, x, o_{1:n})$ with $o_{i}$ drawn from a tool. This is why ReAct reduces errors that arise from missing information and leaves errors of reasoning largely intact.
+where $\mathcal{R}_{b,d}$ is the set of traces the search actually
+visits.  The model's own trace probability is partly replaced by an
+external value signal, so ToT inherits the quality of $v$.  ReAct is
+the same substitution carried out by the environment instead of a
+value function: the trace interleaves actions with observations
+$o_{1:n}$, and the conditioning distribution becomes
+$p_{\theta}(y \mid P, x, o_{1:n})$ with $o_{i}$ drawn from a tool.
+This is why ReAct reduces errors that arise from missing information
+and leaves errors of reasoning largely intact.
 
 \subsection{Cost model}
 \label{sec:cost-model}
 
-Let $C$ count forward passes and $N$ count generated tokens. Direct answering has $C = 1$, $N = O(|y|)$; CoT has $C = 1$, $N = O(|r| + |y|)$; self-consistency multiplies both by $m$; ToT costs $C = O(bd)$ passes plus the value calls. Because $|r| \gg |y|$ on reasoning tasks, the dominant term is usually trace length rather than passes, so accuracy per thousand generated tokens is a more faithful efficiency measure than accuracy per call; both are reported in Section~\ref{sec:results}.
+Let $C$ count forward passes and $N$ count generated tokens.  Direct
+answering has $C = 1$, $N = O(|y|)$; CoT has $C = 1$, $N = O(|r| +
+|y|)$; self-consistency multiplies both by $m$; ToT costs $C =
+O(bd)$ passes plus the value calls.  Because $|r| \gg |y|$ on
+reasoning tasks, the dominant term is usually trace length rather
+than passes, so accuracy per thousand generated tokens is a more
+faithful efficiency measure than accuracy per call; both are reported
+in Section~\ref{sec:results}.
 
 \subsection{Separating algorithmic from lexical effects}
 \label{sec:aer}
 
-Let $\Phi_{\mathrm{lex}}$ range over paraphrases that preserve algorithmic structure---same exemplar count, same trace shape, same output format---and $\Phi_{\mathrm{alg}}$ over changes of cell in Table~\ref{tab:taxonomy}. Fitting a two-factor model to the accuracy $A$ over these factors and their interaction, we define the algorithmic effect ratio
+Let $\Phi_{\mathrm{lex}}$ range over paraphrases that preserve
+algorithmic structure---same exemplar count, same trace shape, same
+output format---and $\Phi_{\mathrm{alg}}$ over changes of cell in
+Table~\ref{tab:taxonomy}.  Fitting a two-factor model to the accuracy
+$A$ over these factors and their interaction, we define the
+algorithmic effect ratio
 
 \begin{equation}
 \mathrm{AER} = \frac{\sigma_{\mathrm{alg}}^{2}}{\sigma_{\mathrm{alg}}^{2} + \sigma_{\mathrm{lex}}^{2}},
 \label{eq:aer}
 \end{equation}
 
-where each term is a variance component. An AER near 1 means the benefit survives rewording; a value near 0.5 means half of a reported gain is a property of the particular sentence. Because the implemented configurations differ in more than one operator wherever they differ at all, the AER characterises complete configurations and licenses no single-operator attribution. The distribution-level quantities $D_{\Phi}$ of~\eqref{eq:divergence} and the $\kappa$ statistics of Proposition 1 remain part of the framework, but the empirical protocol of Section~\ref{sec:method-tools} reports them only where the model API supplies per-token probabilities; the benchmark of Section~\ref{sec:setup} instead reports parse rates, token cost, and latency alongside the AER.
+where each term is a variance component.  An AER near 1 means the
+benefit survives rewording; a value near 0.5 means half of a reported
+gain is a property of the particular sentence.  Because the
+implemented configurations differ in more than one operator wherever
+they differ at all, the AER characterises complete configurations and
+licenses no single-operator attribution.  The distribution-level
+quantities $D_{\Phi}$ of~\eqref{eq:divergence} and the $\kappa$
+statistics of Proposition 1 remain part of the framework, but the
+empirical protocol of Section~\ref{sec:method-tools} reports them
+only where the model API supplies per-token probabilities; the
+benchmark of Section~\ref{sec:setup} instead reports parse rates,
+token cost, and latency alongside the AER.
 
 \begin{table*}[htbp]
 \caption{Taxonomy of Prompt Engineering Techniques by Modified Algorithmic Object}
@@ -474,13 +581,26 @@ Self-refine & $\Phi + \Omega$ & trace and context & $2c$ & $O(c\bar{\ell}_r)$ & 
 \subsection{Theoretical Framework and Justification}
 \label{sec:method-framework}
 
-The taxonomy of Section~\ref{sec:taxonomy} and the framework of Section~\ref{sec:framework} make one testable claim: the operator configuration of a technique determines its behavioural consequences more than the surface wording does.  To test it, the design must (i) implement configurations that span all three operator classes (for composite techniques, with claims restricted to complete configurations, per Section~\ref{sec:method-components}), (ii) include a lexical factor that holds the algorithm fixed while rewording the prompt, so that the algorithmic effect ratio of Equation~\eqref{eq:aer} can be estimated, and (iii) record accuracy, parse rates, token counts, and wall-clock latency, so that a prompt that moves behaviour without moving it usefully is distinguishable from an inert one.  The factorial design below satisfies these requirements and tests hypotheses H1 and H2 of Section~III.
+The taxonomy of Section~\ref{sec:taxonomy} and the framework of
+Section~\ref{sec:framework} make one testable claim: the operator
+configuration of a technique determines its behavioural consequences
+more than the surface wording does.  Testing this claim requires a
+design that (i) implements configurations spanning all three operator
+classes (for composite techniques, with claims restricted to complete
+configurations, per Section~\ref{sec:method-components}), (ii) includes
+a lexical factor that holds the algorithm fixed while rewording the
+prompt, so that the algorithmic effect ratio of
+Equation~\eqref{eq:aer} can be estimated, and (iii) records accuracy,
+parse rates, token counts, and wall-clock latency, so that a prompt
+that moves behaviour without moving it usefully is distinguishable
+from an inert one.  The factorial design below satisfies these
+requirements and tests hypotheses H1 and H2 of Section~III.
 
 \subsection{Research Design}
 \label{sec:method-design}
 
-We use a factorial design with three factors corresponding to the
-three axes of the taxonomy.  The first factor is the technique
+The design is factorial with three factors corresponding to the three
+axes of the taxonomy.  The first factor is the technique
 configuration, with four levels implemented in the local benchmark:
 \begin{enumerate}
     \item Direct answering (baseline, all operators set to identity),
@@ -490,12 +610,12 @@ configuration, with four levels implemented in the local benchmark:
 \end{enumerate}
 Tree-of-thoughts and ReAct appear in the taxonomy
 (Table~\ref{tab:taxonomy}) but are excluded from the local benchmark:
-their search and tool loops require orchestration that the Ollama
-harness does not provide, and their per-item cost is prohibitive on
-the 8 GB of GPU VRAM available on the laptop used here (16 GB of
-system RAM).  The four implemented configurations span all
-three operator classes ($\Phi$ alone, $\Omega$ alone, $\Phi+\Omega$,
-and $\Omega+\Psi$), which is sufficient to test both hypotheses.
+their search and tool loops require orchestration the Ollama harness
+does not provide, and their per-item cost is prohibitive on the 8~GB
+of GPU VRAM available on the laptop used here (16~GB of system RAM).
+The four implemented configurations still span all three operator
+classes ($\Phi$ alone, $\Omega$ alone, $\Phi+\Omega$, and
+$\Omega+\Psi$), which is sufficient to test both hypotheses.
 
 The second factor is lexical: four paraphrases of each GSM8K template
 and two paraphrases of each HumanEval template, checked to preserve
@@ -508,8 +628,8 @@ estimate the lexical variance component.
 
 The third factor is decoding: temperature $T \in \{0.0, 0.3, 0.7,
 1.0\}$ on GSM8K and greedy decoding ($T = 0$) on HumanEval, with
-self-consistency evaluated only at its defined setting $T = 0.7$;
-stochastic sampling uses a nucleus threshold $p = 0.9$ and top-$k =
+self-consistency evaluated only at its defined setting $T = 0.7$.
+Stochastic sampling uses a nucleus threshold $p = 0.9$ and top-$k =
 40$.  Greedy decoding is the reference cell.  This factor
 operationalises $\Psi$ and enables the interaction test required by
 H2, because self-consistency's effect is only defined relative to a
@@ -547,43 +667,42 @@ hand-written problems; accuracy is pass@1, computed by executing each
 generated program against the provided unit tests in an isolated
 subprocess with a 15 s timeout.
 
-We draw a plain uniform-random sample of 100 items from the GSM8K test
-split under a single fixed seed (42) and evaluate all 164 HumanEval
-problems, which are few enough to be covered exhaustively; sampling is
-not stratified.  The evaluation set is identical across every cell of
-the design and is fixed before analysis: the seed and the complete
-item-ID lists are recorded with the evaluation logs, so any run can
-reconstruct the same set.  These sizes balance power against cost: at accuracies near 0.5,
-$n = 100$ yields 95\% confidence intervals of roughly $\pm 10$ points
-under the paired bootstrap of Section~\ref{sec:method-tools}, and
-$n = 164$ roughly $\pm 8$ points.
+We draw a plain uniform-random sample of 100 items from the GSM8K
+test split under a single fixed seed (42) and evaluate all 164
+HumanEval problems, which are few enough to be covered exhaustively;
+sampling is not stratified.  The evaluation set is identical across
+every cell of the design and is fixed before analysis: the seed and
+the complete item-ID lists are recorded with the evaluation logs, so
+any run can reconstruct the same set.  These sizes balance power
+against cost: at accuracies near 0.5, $n = 100$ yields 95\% confidence
+intervals of roughly $\pm 10$ points under the paired bootstrap of
+Section~\ref{sec:method-tools}, and $n = 164$ roughly $\pm 8$ points.
 
-\textbf{Models.}  We evaluate three small open-weight
-models spanning a 3$\times$ parameter range: Llama 3.2 1B (1.2 billion
-parameters) and Llama 3.2 3B (3.2 billion parameters), two
-general-purpose instruction-tuned models from Meta, and
-Qwen2.5-Coder-3B (3.09 billion parameters), a domain-specialised code
-and mathematics instruction model from Alibaba.  We originally
-planned a reasoning-distilled third model (DeepSeek-R1 1.5B), but
-under the structured evaluation templates of
-Section~\ref{sec:method-design} it produced unbounded ``thinking''
-traces---internal rationale continued well beyond the answer slot,
-inflating generation cost and destabilising answer extraction.  We
-therefore adopted a specialised code/math instruction baseline
-instead: it keeps the third scale at the same parameter order while
-testing how a domain-specialised prior interacts with the operator
-classes of Section~\ref{sec:taxonomy}.  Because Qwen2.5-Coder-3B
-substitutes a domain-specialised model for the planned third scale
-rung, the direct scale-versus-technique comparison of
-Section~\ref{sec:results-main} rests on the two Llama models (1B and
-3B); the coder model contributes the specialisation axis rather than a
-third point on the scale ladder.
-The models are served locally as GGUF quantisations (Q4\_K\_M or
-Q8\_0 precision) through Ollama, which uses the llama.cpp inference
-engine with CUDA acceleration on the NVIDIA GPU.  Small open-weight models are required
-because the full benchmark---three models, two tasks, and roughly
-18,000 generations---must run on a single consumer machine.  The
-Ollama harness does not expose per-token log-probabilities, so the
+\textbf{Models.}  Three small open-weight models are evaluated, spanning
+a $3\times$ parameter range: Llama 3.2 1B (1.2 billion parameters)
+and Llama 3.2 3B (3.2 billion parameters), two general-purpose
+instruction-tuned models from Meta, and Qwen2.5-Coder-3B (3.09
+billion parameters), a domain-specialised code and mathematics
+instruction model from Alibaba.  A reasoning-distilled third model
+(DeepSeek-R1 1.5B) was originally planned, but under the structured
+evaluation templates of Section~\ref{sec:method-design} it produced
+unbounded ``thinking'' traces---internal rationale continued well
+beyond the answer slot, inflating generation cost and destabilising
+answer extraction.  We adopted a specialised code/math instruction baseline instead,
+which keeps the third scale at the same parameter order while testing
+how a domain-specialised prior interacts with the operator classes of
+Section~\ref{sec:taxonomy}.  Because
+Qwen2.5-Coder-3B substitutes a domain-specialised model for the
+planned third scale rung, the direct scale-versus-technique comparison
+of Section~\ref{sec:results-main} rests on the two Llama models (1B
+and 3B); the coder model contributes the specialisation axis rather
+than a third point on the scale ladder.  The models are served locally
+as GGUF quantisations (Q4\_K\_M or Q8\_0 precision) through Ollama,
+which uses the llama.cpp inference engine with CUDA acceleration on
+the NVIDIA GPU.  Small open-weight models are required because the
+full benchmark---three models, two tasks, and roughly 18,000
+generations---must run on a single consumer machine.  The Ollama
+harness does not expose per-token log-probabilities, so the
 distributional quantities $D_{\Phi}$ and $\kappa$ defined in
 Section~\ref{sec:framework} are outside the measured scope of this
 study; the empirical protocol therefore reports accuracy, parse
@@ -598,22 +717,20 @@ Ollama HTTP API (\texttt{/api/generate}) with streaming disabled and
 the decoding options fixed per cell.  GSM8K answers are extracted with
 a shared regular expression (preferring the value after the
 `\#\#\#\#' delimiter); parse failures are counted as errors and
-reported separately.
-HumanEval completions are executed against the provided unit tests in
-an isolated subprocess with a 15 s timeout, mirroring the pass@1
-protocol of the original benchmark.  Self-consistency is aggregated
-differently per task: on GSM8K, a plurality vote over the normalised
-extracted numeric answers, with ties between equally frequent answers
-resolved in first-seen (insertion) order; on HumanEval, where
-generated programs cannot be reliably canonicalised for voting, a
-strict-majority rule in
-which an item counts as solved only when at least three of its four
-programs pass the unit tests.
+reported separately.  HumanEval completions are executed against the
+provided unit tests in an isolated subprocess with a 15 s timeout,
+mirroring the pass@1 protocol of the original benchmark.  Self-consistency
+is aggregated differently per task: on GSM8K, a plurality vote over
+the normalised extracted numeric answers, with ties between equally
+frequent answers resolved in first-seen (insertion) order; on
+HumanEval, where generated programs cannot be reliably canonicalised
+for voting, a strict-majority rule in which an item counts as solved
+only when at least three of its four programs pass the unit tests.
 
 \textbf{Statistical analysis.}  Confidence intervals come from a
-paired bootstrap over items with 10,000 resamples; pairwise
+paired bootstrap over items with 10,000 resamples.  Pairwise
 comparisons across the algorithmic factor use Holm--Bonferroni
-correction; variance components for the AER are estimated by the
+correction.  Variance components for the AER are estimated by the
 method of moments from the two-way (technique $\times$ paraphrase)
 analysis of variance at the reference decoding cell.
 
@@ -621,8 +738,8 @@ analysis of variance at the reference decoding cell.
 gaming laptop (Acer Predator) with an NVIDIA GeForce RTX 4060 GPU
 (8 GB of VRAM) and 16 GB of system RAM, running Linux, using CUDA
 acceleration through Ollama (llama.cpp backend); no GPU cluster or
-cloud inference is used.  Wall-clock latency is recorded per item as a
-secondary cost metric alongside generated token counts.
+cloud inference is used.  Wall-clock latency is recorded per item as
+a secondary cost metric alongside generated token counts.
 
 \textbf{Reproducibility.}  All prompt templates, model responses,
 evaluation logs, and analysis scripts are available from the authors
@@ -636,22 +753,22 @@ configuration.
 Table~\ref{tab:results} reports accuracy for the four configurations
 at the reference decoding cell ($T = 0$, $p = 1.0$), except
 self-consistency, which is reported at its defined setting $T = 0.7$
-because greedy decoding is undefined for $m > 1$ (Section~III); the
+because greedy decoding is undefined for $m > 1$ (Section~III).  The
 benchmark produced roughly 18,000 generations across three models and
 two tasks.  Answer extraction with the regular expressions of
 Section~\ref{sec:method-tools} succeeded on 96--100\% of responses
 across the cells of the factorial (at least 99.5\% at the reference
-cell); parse failures are counted as errors.  Headline cells vary across the four GSM8K paraphrases---1B
-direct 12--42\%, 1B zero-shot CoT 45--50\%, 1B few-shot CoT 8--25\%,
-1B self-consistency 4--29\%, 3B direct 39--77\%, 3B zero-shot CoT
-75--82\%, 3B few-shot CoT 66--79\%, 3B self-consistency 78--86\%,
-coder direct 3--11\%, coder zero-shot CoT 72--81\%, coder few-shot
-CoT 68--75\%, and coder self-consistency 74--81\%---while HumanEval
-cells move by at most 4.2 points across its two paraphrases.  Two
-findings organise the results.  First, the
+cell); parse failures are counted as errors.  Headline cells vary
+across the four GSM8K paraphrases---1B direct 12--42\%, 1B zero-shot
+CoT 45--50\%, 1B few-shot CoT 8--25\%, 1B self-consistency 4--29\%, 3B
+direct 39--77\%, 3B zero-shot CoT 75--82\%, 3B few-shot CoT 66--79\%,
+3B self-consistency 78--86\%, coder direct 3--11\%, coder zero-shot
+CoT 72--81\%, coder few-shot CoT 68--75\%, coder self-consistency
+74--81\%---while HumanEval cells move by at most 4.2 points across
+its two paraphrases.  Two findings organise the results.  First, the
 algorithmic effect of a technique is comparable in size to the effect
-of model scale at this size class: on GSM8K, zero-shot CoT raises the
-1B model from 12\% to 50\%, a gain of the same order as the
+of model scale at this size class: on GSM8K, zero-shot CoT raises
+the 1B model from 12\% to 50\%, a gain of the same order as the
 41-point improvement from scaling the model from 1B to 3B
 (Section~\ref{sec:results-main}).  Second, the effect is
 task-dependent: trace- and ensemble-based techniques deliver their
@@ -697,42 +814,42 @@ model from 12\% to 50\%, a gain of 38 points that nearly matches the
 41-point improvement from scaling the model from 1B to 3B under
 direct answering (12\% to 53\%).  Few-shot CoT helps the 3B model
 (53\% to 70\%) and the coder model (6\% to 71\%); the apparent drop at
-the 1B model (12\% to 8\%) lies within the reported interval and is
-not distinguishable from noise at this sample size.
-Self-consistency adds a further gain over
-few-shot CoT at the 3B model (70\% to 79\%), whose uncorrected 95\%
-paired-difference interval excludes zero, and a smaller gain at the
-coder scale (71\% to 74\%), whose interval includes zero, at a
-fourfold token cost (Tables~\ref{tab:results} and~\ref{tab:cost}).
-The coder model's direct-answering accuracy on GSM8K is unusually low
-(6\%) and rises steeply with trace construction, evidence that a
-specialised prior does not by itself make arithmetic tractable
-without intermediate reasoning.  On HumanEval the ordering is
-compressed: no technique improves pass@1 by more than three points,
-zero-shot CoT is neutral or negative, and self-consistency is the
-weakest configuration at every scale (Table~\ref{tab:results}); the
-shortfall relative to direct answering is significant in uncorrected
-comparisons at the 1B model
+the 1B model (12\% to 8\%) lies inside the bootstrap interval and is
+not distinguishable from noise at this sample size.  Self-consistency
+adds a further gain over few-shot CoT at the 3B model (70\% to 79\%),
+whose uncorrected 95\% paired-difference interval excludes zero, and
+a smaller gain at the coder scale (71\% to 74\%), whose interval
+includes zero, at a fourfold token cost
+(Tables~\ref{tab:results} and~\ref{tab:cost}).  The coder model's
+direct-answering accuracy on GSM8K is unusually low (6\%) and rises
+steeply with trace construction, evidence that a specialised prior
+does not by itself make arithmetic tractable without intermediate
+reasoning.
+
+On HumanEval the ordering is compressed.  No technique improves
+pass@1 by more than three points, zero-shot CoT is neutral or
+negative, and self-consistency is the weakest configuration at every
+scale (Table~\ref{tab:results}).  The shortfall relative to direct
+answering is significant in uncorrected comparisons at the 1B model
 ($-11$ points; 95\% CI [$-16.5$, $-6.1$]) and the 3B model ($-8.5$;
-[$-14.0$, $-3.0$]) and directionally consistent at the coder model,
-so its strength comes from both the individual paired differences and
-their cross-model consistency.
-Differences from direct answering are evaluated against the bootstrap
-intervals in the table note, which are wide at $n = 100$; only
-differences exceeding the interval width are treated as evidence of
-an effect.  Paired-bootstrap tests of each technique against direct
-answering at the reference cell, with Holm--Bonferroni correction
-within each model--task block, confirm these headline gains:
-zero-shot CoT is significant at all three GSM8K scales (corrected
-$p < 0.001$) and at the 1B HumanEval scale (corrected $p = 0.027$),
-and few-shot CoT is significant at the 3B (corrected $p = 0.008$) and
-coder (corrected $p < 0.001$) GSM8K scales; no other technique effect
-survives correction.
+[$-14.0$, $-3.0$]) and directionally consistent at the coder model;
+its strength comes from both the individual paired differences and
+their cross-model consistency.  Paired-bootstrap tests of each
+technique against direct answering at the reference cell, with
+Holm--Bonferroni correction within each model--task block, confirm
+the headline gains: zero-shot CoT is significant at all three GSM8K
+scales (corrected $p < 0.001$) and at the 1B HumanEval scale
+(corrected $p = 0.027$), and few-shot CoT is significant at the 3B
+(corrected $p = 0.008$) and coder (corrected $p < 0.001$) GSM8K
+scales; no other technique effect survives correction.
 Self-consistency was excluded from this corrected family because its
 reference cell ($T = 0.7$) differs from the $T = 0$ cell at which
 zero-shot and few-shot CoT are compared with direct answering; the
-confidence intervals reported for self-consistency in this section are
-uncorrected.
+confidence intervals reported for self-consistency in this section
+are uncorrected.  Differences from direct answering are evaluated
+against the bootstrap intervals in the table note, which are wide at
+$n = 100$; only differences exceeding the interval width are treated
+as evidence of an effect.
 
 \subsection{Decoding interactions}
 \label{sec:results-decoding}
@@ -742,20 +859,17 @@ interaction between temperature and sampling strategy on GSM8K under
 nucleus sampling ($p = 0.9$).  Single-sample few-shot CoT accuracy
 changes little across temperature at all three scales: the endpoint
 movements (1B 8\% to 6\%, coder 71\% to 62\%, 3B 70\% to 66\%) and
-the apparent peak at $T = 0.3$ at the 3B scale all lie within the
-reported interval and are not distinguishable from noise;
-self-consistency requires $T > 0$ and is
-evaluated at its defined setting $T = 0.7$.  The ordering of the two
-curves---self-consistency lies above single-sample few-shot CoT at
-the 3B (79\% vs. 72\%) and coder (74\% vs. 69\%) scales but below it
-at the 1B scale (4\% vs. 6\%)---is consistent in direction only at
-the two larger scales; paired-bootstrap 95\% intervals on each
-difference include zero (3B [$-2$, $+16$], coder [$-4$, $+14$], 1B
-[$-7$, $+3$]), so H2 is consistent with the direction of the ordering
-at the 3B and coder scales but is not statistically confirmed at this
-sample size.  Because the sweep is
-run on all three models, the table also shows whether the interaction
-is stable across scale.
+the apparent peak at $T = 0.3$ at the 3B scale all lie inside the
+bootstrap interval and are not distinguishable from noise.
+Self-consistency requires $T > 0$ and is evaluated at its defined
+setting $T = 0.7$.  The ordering of the two curves---self-consistency
+lies above single-sample few-shot CoT at the 3B (79\% vs.\ 72\%) and
+coder (74\% vs.\ 69\%) scales but below it at the 1B scale (4\% vs.\
+6\%)---is consistent in direction only at the two larger scales;
+paired-bootstrap 95\% intervals on each difference include zero (3B
+[$-2$, $+16$], coder [$-4$, $+14$], 1B [$-7$, $+3$]), so H2 is
+consistent with the direction of the ordering at the 3B and coder
+scales but is not statistically confirmed at this sample size.
 
 \begin{table}[htbp]
 \caption{GSM8K accuracy (\%) under the temperature sweep (paraphrase
@@ -803,8 +917,8 @@ model from 1B to 3B under direct answering (12\% to 53\%).}
 Table~\ref{tab:cost} converts accuracy into generation cost on GSM8K
 at the reference decoding cell.  Reasoning traces are the dominant
 cost: few-shot CoT emits several times as many tokens as direct
-answering, and self-consistency multiplies that by $m = 4$;
-wall-clock latency tracks tokens closely because all three models run
+answering, and self-consistency multiplies that by $m = 4$.
+Wall-clock latency tracks tokens closely because all three models run
 on the same CUDA backend.  Accuracy per thousand generated tokens is
 therefore highest for direct answering and lowest for
 self-consistency, and the ranking by cost-adjusted accuracy can
@@ -840,8 +954,8 @@ Table~\ref{tab:aer} reports the algorithmic effect ratio
 (Equation~\eqref{eq:aer}) and its variance components at the
 reference decoding cell, estimated by the method of moments from the
 technique $\times$ paraphrase rectangle.  An AER near one means the
-technique gains survive rewording; a value near 0.5 means roughly half
-of a reported gain is a property of the particular sentence.  On
+technique gains survive rewording; a value near 0.5 means roughly
+half of a reported gain is a property of the particular sentence.  On
 GSM8K the ratio is near one for all three models (0.82--1.00).  On
 HumanEval the estimate is degenerate for the 3B model, where both
 variance components vanish because the technique configurations are
@@ -849,17 +963,19 @@ nearly flat, and low for the coder model (0.25), where lexical
 variance exceeds algorithmic variance; only the 1B model shows a high
 ratio (0.98) on the code task.  The lexical factor is evaluated with
 four paraphrases on GSM8K and two on HumanEval, so the HumanEval
-estimates are the noisier of the two.  Because each variance component
-is estimated from cell means over only 100 items (GSM8K) or 164 items
-(HumanEval) and as few as two paraphrase levels, an item-level
-bootstrap (5,000 resamples) yields wide 95\% intervals (1B GSM8K
-[0.90, 1.00]; 1B HumanEval [0.23, 1.00]; 3B GSM8K [0.40, 1.00];
-Qwen2.5-Coder-3B GSM8K [1.00, 1.00]; Qwen2.5-Coder-3B HumanEval
-[0.00, 1.00]); the point estimates should be read as indicative rather
-than precise.  The 3B HumanEval value is undefined rather than a real
-0.50: in 42\% of resamples both variance components collapse to zero,
-so the reported ratio is a reporting convention for an unidentifiable
-quantity, not a measurement.
+estimates are the noisier of the two.
+
+Because each variance component is estimated from cell means over
+only 100 items (GSM8K) or 164 items (HumanEval) and as few as two
+paraphrase levels, an item-level bootstrap (5,000 resamples) yields
+wide 95\% intervals (1B GSM8K [0.90, 1.00]; 1B HumanEval [0.23, 1.00];
+3B GSM8K [0.40, 1.00]; Qwen2.5-Coder-3B GSM8K [1.00, 1.00];
+Qwen2.5-Coder-3B HumanEval [0.00, 1.00]); the point estimates should
+be read as indicative rather than precise.  The 3B HumanEval value
+is undefined rather than a real 0.50: in 42\% of resamples both
+variance components collapse to zero, so the reported ratio is a
+reporting convention for an unidentifiable quantity, not a
+measurement.
 
 \begin{table}[htbp]
 \caption{Algorithmic effect ratio (Equation~\eqref{eq:aer}) and its
@@ -901,45 +1017,43 @@ effect, and at this size class that effect is comparable in magnitude
 to model scale.  Because the evaluated set pairs two general-purpose
 Llama models with a domain-specialised coder model
 (Qwen2.5-Coder-3B), the comparison also tests whether trace-space
-techniques behave differently under a specialised prior; all three
+techniques behave differently under a specialised prior.  All three
 models run under identical CUDA-accelerated decoding on a single
-machine, so cost and latency are directly comparable.  Three issues
-follow.
+machine, so cost and latency are directly comparable.
 
-First, the cost--quality frontier is steepest for trace construction.
+Trace construction is where the cost--quality frontier is steepest.
 On GSM8K, few-shot CoT emits roughly two to five times as many tokens
 as direct answering (Table~\ref{tab:cost}), and self-consistency
-multiplies
-that by $m = 4$ while adding only a fraction of the accuracy it costs
-in tokens.  Per token, direct answering is the most efficient
-configuration; few-shot CoT buys a large accuracy gain for a
-moderate token premium, and self-consistency buys a small gain at a
-fourfold cost.  The ranking by cost-adjusted accuracy therefore
-depends on the budget, which is why token cost and latency are
-reported alongside accuracy throughout.
+multiplies that by $m = 4$ while adding only a fraction of the
+accuracy it costs in tokens.  Per token, direct answering is the
+most efficient configuration; few-shot CoT buys a large accuracy
+gain for a moderate token premium, and self-consistency buys a small
+gain at a fourfold cost.  The ranking by cost-adjusted accuracy
+therefore depends on the budget, which is why token cost and latency
+are reported alongside accuracy throughout.
 
-Second, the flat HumanEval column is itself a finding: techniques
-that restructure the trace help where the answer is the product of
-intermediate computation (GSM8K) and help little, or hurt, where the
-output is checkable by execution (code); the individual HumanEval
-deltas are within the reported interval, so the strength of this
+There is a finding in the flat HumanEval column too.  Techniques that
+restructure the trace help where the answer is the product of
+intermediate computation (GSM8K), and help little, or hurt, where the
+output is checkable by execution (code).  The individual HumanEval
+deltas lie inside the reported interval, so the strength of this
 reading lies in the direction being consistent across all three
-models rather than in any single comparison.  Robustness to rewording
-is high when the AER is near one---the algorithmic structure, not the
-sentence, carries the effect---and the temperature sweep shows why
-the decoding configuration must be reported with any technique:
-single-sample accuracy moves little with temperature at the scales
-tested (all endpoint changes lie within the reported interval), while
-sampling-based techniques such as self-consistency
+models rather than in any single comparison.  Robustness to
+rewording is high when the AER is near one---the algorithmic
+structure, not the sentence, carries the effect---and the temperature
+sweep shows why the decoding configuration must be reported with any
+technique: single-sample accuracy moves little with temperature at
+the scales tested (all endpoint changes lie inside the reported
+interval), while sampling-based techniques such as self-consistency
 require a nonzero temperature to be defined at all.
 
-Third, the ensemble perspective has a bias dimension.
-Self-consistency cannot repair a systematically wrong marginal mode
+Self-consistency's ensemble framing carries a bias dimension of its
+own.  It cannot repair a systematically wrong marginal mode
 (Proposition 2): majority voting sharpens convergence to whichever
 answer the ensemble favours, so a prompt that elicits a consistent
-but incorrect bias is amplified rather than corrected.  Parse
+but incorrect bias gets amplified rather than corrected.  Parse
 failures, counted as errors and reported separately, are a second
-source of systematic loss: a technique that raises accuracy only by
+source of systematic loss---a technique that raises accuracy only by
 changing the answer format trades one kind of failure for another
 unless parse rates are reported.
 
@@ -950,47 +1064,52 @@ The main threat is external validity: all results come from a narrow
 set of small open-weight models (Llama 3.2 1B and 3B, and the
 code-specialised Qwen2.5-Coder-3B), so the interaction
 structure---particularly the temperature effects---may differ for
-larger models or for API-hosted models with hidden sampling defaults.  Power is limited: at $n = 100$ the
-GSM8K intervals are roughly $\pm 10$ points and at $n = 164$ the
-HumanEval intervals are roughly $\pm 8$ points, so small but real
-effects will not be detected.  The paraphrase factor is small (four
-paraphrases on GSM8K, two on HumanEval) and the two HumanEval
-paraphrases give coarse lexical variance estimates; on HumanEval the
-algorithmic effect is small enough that the AER is degenerate for the
-3B model (both variance components vanish) and is weakly algorithmic
-for the coder model (0.25).  The Ollama
-harness does not expose per-token log-probabilities, so the
-distributional quantities $D_{\Phi}$ and $\kappa$ defined in
+larger models or for API-hosted models with hidden sampling
+defaults.
+
+Power is limited.  At $n = 100$ the GSM8K intervals are roughly
+$\pm 10$ points and at $n = 164$ the HumanEval intervals are roughly
+$\pm 8$ points, so small but real effects will not be detected.  The
+paraphrase factor is small (four paraphrases on GSM8K, two on
+HumanEval), and the two HumanEval paraphrases give coarse lexical
+variance estimates.  On HumanEval the algorithmic effect is small
+enough that the AER is degenerate for the 3B model (both variance
+components vanish) and is weakly algorithmic for the coder model
+(0.25).
+
+The Ollama harness does not expose per-token log-probabilities, so
+the distributional quantities $D_{\Phi}$ and $\kappa$ defined in
 Section~\ref{sec:framework} are not measured here; the empirical
 protocol is restricted to accuracy, parse rates, tokens, and latency.
 Tree-of-thoughts and ReAct are absent from the benchmark, so the
 search- and tool-based operator classes are covered only
-analytically.  A single regular-expression parser counts its failures
-as errors, HumanEval execution is sandboxed with a 15 s timeout that
-may reject correct but slow solutions, and the 8 GB of GPU VRAM
-limits the model scale that can be evaluated.  The
+analytically.  A single regular-expression parser counts its
+failures as errors, HumanEval execution is sandboxed with a 15 s
+timeout that may reject correct but slow solutions, and the 8 GB of
+GPU VRAM limits the model scale that can be evaluated.  The
 evaluation set is fixed before analysis and released with the
 artefacts, and costs are single-run estimates on a single machine.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-Prompt engineering techniques are best understood as algorithmic
-operators on the conditional output distribution, and our controlled
-factorial study shows that their measured effects are separable from
-both prompt wording and decoding configuration: the algorithmic
-effect of a technique is comparable to the effect of model scale at
-the 1B--3B range; it is concentrated in reasoning tasks and neutral
-or negative where the output is checkable by execution; and
-temperature interacts with sampling-based techniques, with
-self-consistency defined only at a nonzero temperature.  The
-benchmark---four techniques, two tasks, three locally served small
-models (two general-purpose Llama scales and a domain-specialised
-coder), and roughly 18,000 generations---runs end to end on a single
-consumer gaming laptop with an 8 GB VRAM GPU, which makes the
-protocol available to researchers without GPU clusters.  We recommend that future studies
-report the algorithmic effect ratio, parse rates, token cost,
-wall-clock latency, and the full decoding configuration---the
+Framed algorithmically, prompt engineering techniques act as
+operators on the conditional output distribution rather than as
+incidental changes to a string of text.  Our controlled factorial
+study shows their measured effects are separable from both prompt
+wording and decoding configuration: the algorithmic effect of a
+technique is comparable in size to the effect of model scale in the
+1B--3B range; it concentrates on reasoning tasks and is neutral or
+negative where the output is checkable by execution; and temperature
+interacts with sampling-based techniques, with self-consistency
+defined only at a nonzero temperature.  The benchmark---four
+techniques, two tasks, three locally served small models (two
+general-purpose Llama scales and a domain-specialised coder), and
+roughly 18,000 generations---runs end to end on a single consumer
+gaming laptop with an 8 GB VRAM GPU, which puts the protocol in
+reach of researchers without GPU clusters.  We recommend future
+studies report the algorithmic effect ratio, parse rates, token cost,
+wall-clock latency, and the full decoding configuration---the same
 protocol used here---so that gains become attributable, comparable,
 and reproducible at whatever scale is available.
 
