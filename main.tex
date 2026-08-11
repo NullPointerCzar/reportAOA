@@ -530,7 +530,32 @@ algorithmic effect ratio
 \label{eq:aer}
 \end{equation}
 
-where each term is a variance component.  An AER near 1 means the
+where each term is a variance component.
+
+Concretely, let $A_{ik}$ be the cell accuracy for technique
+$i \in \{1,\dots,I\}$ and paraphrase $k \in \{1,\dots,K\}$ ($I = 3$;
+$K = 4$ on GSM8K, $K = 2$ on HumanEval) at the reference decoding
+cell.  We fit the balanced two-way variance-components model $A_{ik}
+= \mu + \alpha_i + \beta_k + \varepsilon_{ik}$, with $\alpha_i \sim
+(0, \sigma_{\mathrm{alg}}^2)$, $\beta_k \sim (0,
+\sigma_{\mathrm{lex}}^2)$, and $\varepsilon_{ik} \sim (0,
+\sigma_{\mathrm{res}}^2)$, mutually independent, and estimate the
+variance components from the ANOVA mean squares by the method of
+moments:
+
+\begin{equation}
+\hat{\sigma}_{\mathrm{alg}}^{2} = \max\!\left(0, \frac{MS_{\mathrm{tech}} - MS_{\mathrm{res}}}{K}\right), \qquad
+\hat{\sigma}_{\mathrm{lex}}^{2} = \max\!\left(0, \frac{MS_{\mathrm{lex}} - MS_{\mathrm{res}}}{I}\right).
+\label{eq:varcomp}
+\end{equation}
+
+Non-negativity truncation is what produces the degenerate AER values
+reported in Table~\ref{tab:aer}.  Confidence intervals on AER come
+from an item-level bootstrap rather than a closed-form interval
+because the truncated estimator has no standard asymptotic
+distribution at these small cell counts ($I = 3$, $K \le 4$).
+
+An AER near 1 means the
 benefit survives rewording; a value near 0.5 means half of a reported
 gain is a property of the particular sentence.  Because the
 implemented configurations differ in more than one operator wherever
@@ -820,7 +845,13 @@ adds a further gain over few-shot CoT at the 3B model (70\% to 79\%),
 whose uncorrected 95\% paired-difference interval excludes zero, and
 a smaller gain at the coder scale (71\% to 74\%), whose interval
 includes zero, at a fourfold token cost
-(Tables~\ref{tab:results} and~\ref{tab:cost}).  The coder model's
+(Tables~\ref{tab:results} and~\ref{tab:cost}).  Because this
+comparison sets self-consistency at its required $T = 0.7$ against
+greedy ($T = 0$) baselines, the matched-temperature
+comparison---self-consistency against single-sample few-shot CoT,
+both at $T = 0.7$---is reported separately in
+Table~\ref{tab:tempsweep} and Fig.~\ref{fig:results}a
+(Section~\ref{sec:results-decoding}).  The coder model's
 direct-answering accuracy on GSM8K is unusually low (6\%) and rises
 steeply with trace construction, evidence that a specialised prior
 does not by itself make arithmetic tractable without intermediate
